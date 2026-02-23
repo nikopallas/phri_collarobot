@@ -1,0 +1,30 @@
+# Named joint positions for the Kinova Gen3 pick-and-place.
+# joints: [joint_1, joint_2, joint_3, joint_4, joint_5, joint_6] in radians
+# time_from_start: seconds allowed to reach this position
+#
+# All values are zero placeholders — record real poses with:
+#   ros2 run collarobot_actions record_position <name> [--time SECS]
+
+[pre_pick]
+joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+time_from_start = 3.0
+
+[pick]
+joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+time_from_start = 2.0
+
+[post_pick]
+joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+time_from_start = 3.0
+
+[pre_place]
+joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+time_from_start = 3.0
+
+[place]
+joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+time_from_start = 2.0
+
+[post_place]
+joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+time_from_start = 3.0

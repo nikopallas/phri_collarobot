@@ -10,6 +10,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name, [package_name + '/positions.toml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,6 +25,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'pick_place_node = collarobot_actions.pick_place_node:main',
+            'record_position = collarobot_actions.record_position:main',
         ],
     },
 )
