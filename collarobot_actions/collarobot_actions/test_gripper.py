@@ -15,7 +15,6 @@ Examples:
 
 import argparse
 import sys
-import threading
 
 import rclpy
 from control_msgs.action import GripperCommand
@@ -33,6 +32,7 @@ class TestGripperNode(Node):
         self._client = ActionClient(self, GripperCommand, GRIPPER_ACTION)
         self._position = position
         self._effort = effort
+        self._done = False
         self.create_timer(0.1, self._try_send)
         self._sent = False
 
@@ -51,42 +51,24 @@ class TestGripperNode(Node):
         self.get_logger().info(
             f'Sending gripper position={self._position:.3f}  effort={self._effort:.1f}N'
         )
+        self._client.send_goal_async(goal).add_done_callback(self._on_goal)
 
-        done = threading.Event()
-        result_holder = {}
+    def _on_goal(self, future):
+        handle = future.result()
+        if not handle.accepted:
+            self.get_logger().error('Goal rejected by gripper action server')
+            self._done = True
+            return
+        handle.get_result_async().add_done_callback(self._on_result)
 
-        def _on_goal(future):
-            handle = future.result()
-            if not handle.accepted:
-                self.get_logger().error('Goal rejected by gripper action server')
-                done.set()
-                return
-            handle.get_result_async().add_done_callback(
-                lambda f: _on_result(f, handle)
-            )
-
-        def _on_result(future, handle):
-            result = future.result().result
-            result_holder['result'] = result
-            done.set()
-
-        self._client.send_goal_async(goal).add_done_callback(_on_goal)
-
-        threading.Thread(target=self._wait_and_exit, args=(done, result_holder), daemon=True).start()
-
-    def _wait_and_exit(self, done: threading.Event, result_holder: dict):
-        if not done.wait(timeout=10.0):
-            self.get_logger().error('Gripper action timed out after 10s')
-            raise SystemExit(1)
-
-        result = result_holder.get('result')
-        if result is not None:
-            self.get_logger().info(
-                f'Done — reached={result.reached_goal}  '
-                f'position={result.position:.4f}  '
-                f'effort={result.effort:.2f}N'
-            )
-        raise SystemExit(0)
+    def _on_result(self, future):
+        result = future.result().result
+        self.get_logger().info(
+            f'Done — reached={result.reached_goal}  '
+            f'position={result.position:.4f}  '
+            f'effort={result.effort:.2f}N'
+        )
+        self._done = True
 
 
 def main(args=None):
@@ -111,13 +93,11 @@ def main(args=None):
     rclpy.init(args=args)
     node = TestGripperNode(parsed.position, parsed.effort)
 
-    try:
-        rclpy.spin(node)
-    except SystemExit:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    while rclpy.ok() and not node._done:
+        rclpy.spin_once(node)
+
+    node.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == '__main__':
