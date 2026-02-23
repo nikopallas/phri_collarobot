@@ -28,6 +28,7 @@ setup(
             'pick_place_node = collarobot_actions.pick_place_node:main',
             'record_position = collarobot_actions.record_position:main',
             'goto_position = collarobot_actions.goto_position:main',
+            'goto_carriage_lift = collarobot_actions.goto_carriage_lift:main',
             'test_gripper = collarobot_actions.test_gripper:main',
         ],
     },

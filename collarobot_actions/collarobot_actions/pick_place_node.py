@@ -1,11 +1,21 @@
 """
-Pick-and-place state machine node for Kinova Gen3 + Robotiq gripper.
+Pick-and-place action server for Kinova Gen3 + Robotiq gripper.
 
-State transitions (strict linear, any exception -> ERROR -> IDLE):
-  IDLE -> PRE_PICK -> PICKING -> POST_PICK -> PRE_PLACE -> PLACING -> POST_PLACE -> IDLE
+Sequence (any exception → action aborted):
+  PRE_PICK → PICKING → POST_PICK → HOME → PRE_PLACE → PLACING → POST_PLACE
 
-Trigger:  ros2 service call /pick_place_node/trigger std_srvs/srv/Trigger
-State:    ros2 topic echo /pick_place_node/state
+  POST_PICK  reuses the pre_pick  position (retreat to approach height)
+  POST_PLACE reuses the pre_place position (retreat to approach height)
+  HOME is a safe neutral transit pose between the pick and place zones.
+
+Before starting, the node verifies that carriage and lift are within tolerance of
+the values recorded in the 'home' position (if carriage/lift were recorded there).
+The operator must set carriage and lift manually; use goto_carriage_lift to command them.
+Gripper values are read from positions.toml (gripper_open / gripper_close).
+
+Action client:
+  ros2 action send_goal --feedback /pick_place_node/pick_place \\
+      collarobot_msgs/action/PickPlace '{}'
 """
 
 import threading
@@ -16,32 +26,42 @@ from pathlib import Path
 
 import rclpy
 from builtin_interfaces.msg import Duration
+from collarobot_msgs.action import PickPlace
 from control_msgs.action import GripperCommand
-from rclpy.action import ActionClient
+from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from std_msgs.msg import String
-from std_srvs.srv import Trigger
+from std_msgs.msg import Float32
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 JOINT_NAMES = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6']
-GRIPPER_OPEN = 0.0
-GRIPPER_CLOSE = 0.8
+CARRIAGE_LIFT_TOL = 0.05  # tolerance for carriage/lift position check (same units as position/get)
 POSITIONS_PATH = (
     Path.home() / 'collarobot_ws' / 'src' / 'collarobot_actions'
     / 'collarobot_actions' / 'positions.toml'
 )
 
 
-class State(Enum):
-    IDLE = auto()
+class Step(Enum):
     PRE_PICK = auto()
     PICKING = auto()
     POST_PICK = auto()
+    HOME = auto()
     PRE_PLACE = auto()
     PLACING = auto()
     POST_PLACE = auto()
-    ERROR = auto()
+
+
+SEQUENCE = [
+    Step.PRE_PICK,
+    Step.PICKING,
+    Step.POST_PICK,
+    Step.HOME,
+    Step.PRE_PLACE,
+    Step.PLACING,
+    Step.POST_PLACE,
+]
 
 
 class PickPlaceNode(Node):
@@ -51,80 +71,170 @@ class PickPlaceNode(Node):
 
         with open(POSITIONS_PATH, 'rb') as f:
             self._positions = tomllib.load(f)
-        self.get_logger().info(f'Loaded positions: {list(self._positions.keys())}')
+        self._gripper_open = float(self._positions.get('gripper_open', 0.0))
+        self._gripper_close = float(self._positions.get('gripper_close', 0.8))
+        named = [k for k in self._positions if isinstance(self._positions[k], dict)]
+        self.get_logger().info(
+            f'Loaded positions: {named}  '
+            f'gripper open={self._gripper_open} close={self._gripper_close}'
+        )
+
+        # ReentrantCallbackGroup lets the action execute_callback and the
+        # gripper action client callbacks run concurrently in MultiThreadedExecutor.
+        cb = ReentrantCallbackGroup()
 
         self._traj_pub = self.create_publisher(
-            JointTrajectory,
-            '/joint_trajectory_controller/joint_trajectory',
-            10,
+            JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10
         )
-        self._state_pub = self.create_publisher(String, '~/state', 10)
+
+        # Subscribe to carriage/lift feedback for pre-run position check.
+        self._carriage_pos = None
+        self._lift_pos = None
+        self.create_subscription(
+            Float32, '/elmo/id1/carriage/position/get', self._on_carriage, 10
+        )
+        self.create_subscription(
+            Float32, '/elmo/id1/lift/position/get', self._on_lift, 10
+        )
 
         self._gripper_client = ActionClient(
-            self, GripperCommand, '/robotiq_gripper_controller/gripper_cmd'
+            self, GripperCommand, '/robotiq_gripper_controller/gripper_cmd',
+            callback_group=cb,
         )
 
-        self.create_service(Trigger, '~/trigger', self._trigger_callback)
-        self.create_timer(0.5, self._publish_state)
+        self._busy = False
+        self._busy_lock = threading.Lock()
 
-        self._state = State.IDLE
-        self._lock = threading.Lock()
+        self._action_server = ActionServer(
+            self,
+            PickPlace,
+            'pick_place',
+            execute_callback=self._execute_callback,
+            goal_callback=self._goal_callback,
+            cancel_callback=self._cancel_callback,
+            callback_group=cb,
+        )
 
-        self.get_logger().info('Ready. Call ~/trigger to start pick-and-place.')
-
-    # ------------------------------------------------------------------
-    # Service callback
-    # ------------------------------------------------------------------
-
-    def _trigger_callback(self, request, response):
-        with self._lock:
-            if self._state != State.IDLE:
-                response.success = False
-                response.message = f'Not idle (current state: {self._state.name})'
-                return response
-            self._state = State.PRE_PICK
-
-        threading.Thread(target=self._run_state_machine, daemon=True).start()
-        response.success = True
-        response.message = 'Pick-and-place started'
-        return response
+        self.get_logger().info('Ready.')
 
     # ------------------------------------------------------------------
-    # State machine
+    # Action server callbacks
     # ------------------------------------------------------------------
 
-    def _run_state_machine(self):
+    def _goal_callback(self, goal_request):
+        with self._busy_lock:
+            if self._busy:
+                self.get_logger().warn('Rejecting goal: already running')
+                return GoalResponse.REJECT
+            self._busy = True
+        return GoalResponse.ACCEPT
+
+    def _cancel_callback(self, goal_handle):
+        self.get_logger().info('Cancel requested')
+        return CancelResponse.ACCEPT
+
+    def _execute_callback(self, goal_handle):
+        self.get_logger().info('Pick-and-place started')
+        result = PickPlace.Result()
+        step = None
         try:
-            self._execute(State.PRE_PICK)
-            self._execute(State.PICKING)
-            self._execute(State.POST_PICK)
-            self._execute(State.PRE_PLACE)
-            self._execute(State.PLACING)
-            self._execute(State.POST_PLACE)
-            self._set_state(State.IDLE)
+            self._check_setup()
+            for step in SEQUENCE:
+                if goal_handle.is_cancel_requested:
+                    self.get_logger().info('Cancelled')
+                    goal_handle.canceled()
+                    result.success = False
+                    result.message = 'Cancelled'
+                    return result
+
+                fb = PickPlace.Feedback()
+                fb.state = step.name
+                goal_handle.publish_feedback(fb)
+                self.get_logger().info(f'Step -> {step.name}')
+                self._execute_step(step)
+
+            goal_handle.succeed()
+            result.success = True
+            result.message = 'Pick-and-place complete'
+
         except Exception as exc:
-            self.get_logger().error(f'Error in {self._state.name}: {exc}')
-            self._set_state(State.ERROR)
-            time.sleep(1.0)
-            self._set_state(State.IDLE)
+            where = step.name if step is not None else 'setup check'
+            self.get_logger().error(f'Error in {where}: {exc}')
+            goal_handle.abort()
+            result.success = False
+            result.message = str(exc)
 
-    def _execute(self, state: State):
-        self._set_state(state)
+        finally:
+            with self._busy_lock:
+                self._busy = False
 
-        if state == State.PRE_PICK:
+        return result
+
+    # ------------------------------------------------------------------
+    # Carriage / lift monitoring
+    # ------------------------------------------------------------------
+
+    def _on_carriage(self, msg: Float32):
+        self._carriage_pos = msg.data
+
+    def _on_lift(self, msg: Float32):
+        self._lift_pos = msg.data
+
+    def _check_setup(self):
+        """Verify carriage and lift are at the positions recorded for 'home'.
+
+        Raises RuntimeError with a descriptive message if any axis is out of
+        tolerance so the operator knows what to adjust.  If carriage/lift were
+        not recorded in the home entry, the check is silently skipped.
+        """
+        home = self._positions.get('home', {})
+        issues = []
+
+        for axis, stored_key, current in [
+            ('carriage', 'carriage', self._carriage_pos),
+            ('lift',     'lift',     self._lift_pos),
+        ]:
+            if stored_key not in home:
+                continue  # not recorded for this setup — skip
+            expected = float(home[stored_key])
+            if current is None:
+                self.get_logger().warn(
+                    f'{axis} position unknown (no data on topic yet) — skipping check'
+                )
+                continue
+            if abs(current - expected) > CARRIAGE_LIFT_TOL:
+                issues.append(
+                    f'{axis}: expected {expected:.4f}, got {current:.4f} '
+                    f'(tolerance ±{CARRIAGE_LIFT_TOL})'
+                )
+
+        if issues:
+            raise RuntimeError(
+                'Setup check failed — adjust manually before triggering:\n  '
+                + '\n  '.join(issues)
+            )
+
+    # ------------------------------------------------------------------
+    # Step execution
+    # ------------------------------------------------------------------
+
+    def _execute_step(self, step: Step):
+        if step == Step.PRE_PICK:
             self._move_to('pre_pick')
-        elif state == State.PICKING:
+        elif step == Step.PICKING:
             self._move_to('pick')
-            self._gripper(GRIPPER_CLOSE)
-        elif state == State.POST_PICK:
-            self._move_to('post_pick')
-        elif state == State.PRE_PLACE:
+            self._gripper(self._gripper_close)
+        elif step == Step.POST_PICK:
+            self._move_to('pre_pick')   # retreat to approach height (same position)
+        elif step == Step.HOME:
+            self._move_to('home')
+        elif step == Step.PRE_PLACE:
             self._move_to('pre_place')
-        elif state == State.PLACING:
+        elif step == Step.PLACING:
             self._move_to('place')
-            self._gripper(GRIPPER_OPEN)
-        elif state == State.POST_PLACE:
-            self._move_to('post_place')
+            self._gripper(self._gripper_open)
+        elif step == Step.POST_PLACE:
+            self._move_to('pre_place')  # retreat to approach height (same position)
 
     # ------------------------------------------------------------------
     # Motion helpers
@@ -135,6 +245,7 @@ class PickPlaceNode(Node):
         joints = pos['joints']
         duration_sec = float(pos['time_from_start'])
 
+        # Arm trajectory
         point = JointTrajectoryPoint()
         point.positions = [float(j) for j in joints]
         secs = int(duration_sec)
@@ -144,7 +255,6 @@ class PickPlaceNode(Node):
         msg.joint_names = JOINT_NAMES
         msg.points = [point]
 
-        # Wait until the controller subscriber is matched before publishing.
         deadline = time.time() + 5.0
         while self._traj_pub.get_subscription_count() == 0:
             if time.time() > deadline:
@@ -179,20 +289,6 @@ class PickPlaceNode(Node):
         if not done.wait(timeout=10.0):
             raise RuntimeError(f'Gripper {label} timed out')
         self.get_logger().info(f'Gripper {label} done')
-
-    # ------------------------------------------------------------------
-    # State helpers
-    # ------------------------------------------------------------------
-
-    def _set_state(self, state: State):
-        self._state = state
-        self.get_logger().info(f'State -> {state.name}')
-        self._publish_state()
-
-    def _publish_state(self):
-        msg = String()
-        msg.data = self._state.name
-        self._state_pub.publish(msg)
 
 
 def main(args=None):

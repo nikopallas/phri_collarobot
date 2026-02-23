@@ -1,8 +1,8 @@
 # CollaboRobot — CLAUDE.md
 
 ## Project overview
-ROS2 Jazzy workspace for a Kinova Gen3 6-DOF arm + Robotiq gripper.
-Three packages: `collarobot_actions`, `collarobot_controller`, `collarobot_perception`.
+ROS2 Jazzy workspace for a Kinova Gen3 6-DOF arm + Robotiq gripper + Elmo carriage/lift.
+Packages: `collarobot_msgs`, `collarobot_actions`, `collarobot_controller`, `collarobot_perception`.
 
 ## Hardware / ROS topics
 | Resource | Topic / Server |
@@ -10,8 +10,12 @@ Three packages: `collarobot_actions`, `collarobot_controller`, `collarobot_perce
 | Arm trajectory | `/joint_trajectory_controller/joint_trajectory` (`trajectory_msgs/JointTrajectory`) |
 | Gripper action | `/robotiq_gripper_controller/gripper_cmd` (`control_msgs/action/GripperCommand`) |
 | Joint feedback | `/joint_states` (`sensor_msgs/JointState`) |
+| Carriage position read | `/elmo/id1/carriage/position/get` (`std_msgs/Float32`) |
+| Carriage position set  | `/elmo/id1/carriage/position/set` (`std_msgs/Float32`) |
+| Lift position read | `/elmo/id1/lift/position/get` (`std_msgs/Float32`) |
+| Lift position set  | `/elmo/id1/lift/position/set` (`std_msgs/Float32`) |
 | Gripper: open | `position = 0.0` |
-| Gripper: close | `position = 0.8` |
+| Gripper: close | `position = 0.8` (calibrate with `test_gripper`) |
 
 ```python
 JOINT_NAMES = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6']
@@ -22,85 +26,94 @@ Location (hardcoded in all nodes):
 ```
 ~/collarobot_ws/src/collarobot_actions/collarobot_actions/positions.toml
 ```
-Record a position with:
+
+### Schema
+```toml
+gripper_open  = 0.0   # top-level scalars read by pick_place_node
+gripper_close = 0.8
+
+[home]
+joints          = [j1, j2, j3, j4, j5, j6]   # radians
+time_from_start = 5.0                          # seconds
+carriage        = 2.5000   # optional — recorded automatically if topic is live
+lift            = 0.3000   # optional — recorded automatically if topic is live
+```
+
+Carriage/lift in `[home]` are used as the **pre-run position check** in `pick_place_node`.
+
+## CLI tools (all in `collarobot_actions`)
 ```bash
+# Record current arm + carriage/lift position
 ros2 run collarobot_actions record_position <name> [--time SECS]
+
+# Move arm to a named position (one-shot test)
+ros2 run collarobot_actions goto_position <name>
+
+# Command carriage+lift to a named position's recorded values (operator setup)
+ros2 run collarobot_actions goto_carriage_lift <name>
+
+# Test gripper at a specific position value (calibration)
+ros2 run collarobot_actions test_gripper <0.0–1.0>
 ```
 
-### Schema (current)
-```toml
-[home]
-joints = [j1, j2, j3, j4, j5, j6]   # radians
-time_from_start = 3.0                 # seconds
+## pick_place_node — action server
+Action: `/pick_place_node/pick_place` (`collarobot_msgs/action/PickPlace`)
+
+Sequence:
+```
+PRE_PICK → PICKING (close gripper) → POST_PICK → HOME → PRE_PLACE → PLACING (open gripper) → POST_PLACE
+```
+- `POST_PICK` reuses `pre_pick` position (retreat to approach height)
+- `POST_PLACE` reuses `pre_place` position (retreat to approach height)
+- Before starting: checks carriage/lift are within `CARRIAGE_LIFT_TOL = 0.05` of `home` values
+
+```bash
+# Start node
+ros2 run collarobot_actions pick_place_node
+
+# Trigger (with live step feedback)
+ros2 action send_goal --feedback /pick_place_node/pick_place \
+    collarobot_msgs/action/PickPlace '{}'
 ```
 
-### Planned schema extension — transition graph
-Add `allowed_next` to encode which moves are legal from each position.
-This lets `move_controller` enforce safe sequencing without hard-coding it in nodes.
-```toml
-[home]
-joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-time_from_start = 3.0
-allowed_next = ["pre_pick", "pre_place"]
-
-[pre_pick]
-joints = [...]
-time_from_start = 3.0
-allowed_next = ["pick", "home"]
+## Build
+```bash
+# Must build collarobot_msgs first (generates PickPlace.action)
+colcon build --packages-select collarobot_msgs --symlink-install
+. install/setup.bash
+colcon build --packages-select collarobot_actions --symlink-install
+. install/setup.bash
 ```
 
-## Architecture (planned)
-
-### collarobot_msgs  ← NEW package
-Custom service for arm control:
+## Architecture (planned — not yet implemented)
+### collarobot_msgs — future additions
 ```
 # MoveToPosition.srv
 string position_name
 ---
 bool success
-string message          # failure reason
-string from_position    # detected current position
+string message
+string from_position
 ```
 
 ### collarobot_controller — move_controller node
-Service server: `/move_to_position` (`collarobot_msgs/MoveToPosition`)
+Service `/move_to_position` with:
+1. Current position detection via L∞ joint comparison (~0.05 rad threshold)
+2. `allowed_next` transition graph from TOML
+3. Reject if unknown position or disallowed transition
 
-**Service logic:**
-1. Cache latest `/joint_states`
-2. On call: compare cached joints vs all TOML positions (L∞ threshold ~0.05 rad)
-3. If no match → reject ("unknown current position")
-4. Look up `allowed_next` for matched position
-5. If target not in `allowed_next` → reject ("transition X→Y not allowed")
-6. Publish trajectory, sleep, return success
-
-Also exposes a **busy flag** so callers know if a move is already in progress.
-
-### collarobot_actions — pick_place_node
-Refactor `_move_to()` to call `/move_to_position` service instead of publishing directly.
-This makes the node thin: just sequencing + gripper control.
-
-## Build / run
-```bash
-# Build
-colcon build --packages-select collarobot_actions collarobot_controller --symlink-install
-. install/setup.bash
-
-# Quick move test (one shot, no service needed)
-ros2 run collarobot_controller goto_position <name>
-
-# Full pick-place
-ros2 run collarobot_actions pick_place_node
-ros2 service call /pick_place_node/trigger std_srvs/srv/Trigger
-ros2 topic echo /pick_place_node/state
-```
+When implemented, `pick_place_node._move_to()` will call this service instead of publishing directly.
 
 ## Key decisions / lessons
-- `maintainer_email` in package.xml must be a valid email format (e.g. `phri3@todo.todo`)
-  or ament_index registration silently fails → `Package not found` at runtime.
-- `--symlink-install` only symlinks .py files; TOML/data files are copied.
-  Hardcode POSITIONS_PATH to `Path.home() / 'collarobot_ws' / 'src' / ...` so writes
-  always go to the source tree.
-- Use `MultiThreadedExecutor` whenever a node has a background thread that sleeps
-  (state machine, blocking motion wait) so ROS callbacks keep firing.
-- Gripper wait: use `threading.Event`, never `spin_until_future_complete` from a
-  non-main thread — it causes executor re-entrance deadlocks.
+- `maintainer_email` in package.xml must be valid format (`phri3@todo.todo`) or
+  ament_index silently fails → `Package not found` at runtime.
+- `--symlink-install` only symlinks .py files; TOML/data files are copied on build.
+  Hardcode `POSITIONS_PATH` to source tree so `record_position` writes go to the right place.
+- `MultiThreadedExecutor` required whenever a node blocks in a background thread
+  (action execute_callback, motion sleep) so other callbacks (gripper result) keep firing.
+- Gripper wait: use `threading.Event` + `add_done_callback`. Never `spin_until_future_complete`
+  from a non-executor thread — causes deadlock.
+- `ReentrantCallbackGroup` on both ActionServer and ActionClient so the execute_callback
+  thread and gripper result callbacks can run concurrently.
+- Publisher subscriber-count fix: poll `get_subscription_count() > 0` before publishing
+  trajectory — the controller needs to be matched first or messages are dropped.

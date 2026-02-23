@@ -1,0 +1,8 @@
+# Goal: empty — sequence and positions defined by positions.toml
+---
+# Result
+bool success
+string message
+---
+# Feedback: name of the current step
+string state
