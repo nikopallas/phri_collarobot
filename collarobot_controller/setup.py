@@ -14,7 +14,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='phri3',
-    maintainer_email='phri3',
+    maintainer_email='phri3@todo.todo',
     description='TODO: Package description',
     license='TODO: License declaration',
     extras_require={
