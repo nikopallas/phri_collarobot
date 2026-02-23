@@ -27,7 +27,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 JOINT_NAMES = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6']
 GRIPPER_OPEN = 0.0
 GRIPPER_CLOSE = 0.8
-POSITIONS_PATH = Path(__file__).parent / 'positions.toml'
+POSITIONS_PATH = Path(__file__).resolve().parent / 'positions.toml'
 
 
 class State(Enum):
