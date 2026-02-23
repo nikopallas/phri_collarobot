@@ -2,11 +2,11 @@
 Move the arm to a single named position from positions.toml and exit.
 
 Usage:
-  ros2 run collarobot_controller goto_position <name>
+  ros2 run collarobot_actions goto_position <name>
 
 Examples:
-  ros2 run collarobot_controller goto_position home
-  ros2 run collarobot_controller goto_position pre_pick
+  ros2 run collarobot_actions goto_position home
+  ros2 run collarobot_actions goto_position pre_pick
 """
 
 import argparse
@@ -52,13 +52,15 @@ class GotoPositionNode(Node):
             10,
         )
 
-        # Give the publisher a moment to connect before sending.
-        self.create_timer(0.3, lambda: self._send_and_wait(position_name, joints, duration_sec))
+        # Poll until the controller subscriber is matched, then send.
+        self.create_timer(0.05, lambda: self._try_send(position_name, joints, duration_sec))
         self._sent = False
 
-    def _send_and_wait(self, name: str, joints: list, duration_sec: float):
+    def _try_send(self, name: str, joints: list, duration_sec: float):
         if self._sent:
             return
+        if self._traj_pub.get_subscription_count() == 0:
+            return  # controller not connected yet — wait for next tick
         self._sent = True
 
         secs = int(duration_sec)

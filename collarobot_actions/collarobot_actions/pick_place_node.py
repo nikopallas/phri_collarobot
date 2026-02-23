@@ -144,6 +144,13 @@ class PickPlaceNode(Node):
         msg.joint_names = JOINT_NAMES
         msg.points = [point]
 
+        # Wait until the controller subscriber is matched before publishing.
+        deadline = time.time() + 5.0
+        while self._traj_pub.get_subscription_count() == 0:
+            if time.time() > deadline:
+                raise RuntimeError('Trajectory controller not connected (no subscribers)')
+            time.sleep(0.05)
+
         self._traj_pub.publish(msg)
         self.get_logger().info(f'Moving to "{name}" — waiting {duration_sec:.1f}s')
         time.sleep(duration_sec)
