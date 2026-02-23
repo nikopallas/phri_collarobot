@@ -1,0 +1,11 @@
+# Core dependencies
+kagglehub
+pandas
+numpy
+scipy
+
+# Development & Testing dependencies
+flake8
+flake8-pyproject
+pytest
+pytest-mock
