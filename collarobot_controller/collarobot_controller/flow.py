@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from models import predict, decide
+from models import pick_action
 import random
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -43,40 +43,14 @@ while True:
     any_action_taken = False
 
     # --- PHASE 1: AI ACTION (Move XOR Suggest) ---
-    ai_action_taken = False
-
-    # 1a. AI Move: Try to move an ingredient from Proposed to Accepted/Rejected
-    if proposed:
-        decisions = decide(accepted, rejected, proposed, excluded)
-        print(f"AI Decisions: {decisions}")
-
-        moves = {ing: dec for ing, dec in decisions.items() if dec != "keep"}
-        if moves:
-            ing = list(moves.keys())[0]
-            dec = moves[ing]
-            if dec == "accept":
-                accepted.add(ing)
-                proposed.remove(ing)
-                ai_action_taken = True
-                print(f"AI PHASE: AI Accepted {ing}")
-            elif dec == "reject":
-                proposed.remove(ing)
-                ai_action_taken = True
-                print(f"AI PHASE: AI Rejected {ing}")
-
-    # 1b. AI Suggest: If no move, AI proposes a new ingredient
-    if not ai_action_taken:
-        available = set(INGREDIENTS) - (accepted | rejected | proposed)
-        recipe, prob_rec, ingredient, prob_ing = predict(accepted, rejected, available, proposed, excluded)
-
-        if ingredient:
-            print(f"AI Suggestion: {ingredient} (Recipe: {recipe}, Prob: {prob_rec})")
-            proposed.add(ingredient)
-            ai_action_taken = True
-            print(f"AI PHASE: AI Proposed {ingredient}")
-
-    if ai_action_taken:
+    available = set(INGREDIENTS) - (accepted | rejected | proposed)
+    action, ingredient = pick_action(accepted, proposed, available, rejected, excluded)
+    
+    if action != "skip":
         any_action_taken = True
+        if action == "rejected":
+            rejected.add(ingredient)
+        # Note: action == "accepted" or "proposed" already modified accepted/proposed in models.py
 
     # --- PHASE 2: USER ACTION (Move XOR Propose) ---
     user_action_taken = False

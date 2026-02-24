@@ -2,3 +2,6 @@
 .vscode
 __pycache__
 .pytest__cache
+*.pdf
+collarobot_controller/collarobot_controller/complete_flow.py
+collarobot_perception/images/tags
