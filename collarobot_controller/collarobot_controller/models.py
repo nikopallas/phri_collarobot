@@ -22,7 +22,23 @@ with open(RECIPES_PATH) as f:
     RECIPES = json.load(f)
 
 with open(INGREDIENTS_PATH) as f:
-    INGREDIENTS = json.load(f)
+    INGREDIENTS_DATA = json.load(f)
+
+# List of ingredient names for internal logic that iterates over all ingredients
+INGREDIENTS = list(INGREDIENTS_DATA.keys())
+
+
+def get_ingredient_id(name: str) -> int | None:
+    """Returns the ID for a given ingredient name."""
+    return INGREDIENTS_DATA.get(name)
+
+
+def get_ingredient_name(ing_id: int) -> str | None:
+    """Returns the name for a given ingredient ID."""
+    for name, iid in INGREDIENTS_DATA.items():
+        if iid == ing_id:
+            return name
+    return None
 
 
 # softmax over dict

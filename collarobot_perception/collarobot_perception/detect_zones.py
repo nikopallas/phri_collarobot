@@ -2,6 +2,7 @@ import cv2
 import cv2.aruco as aruco
 import numpy as np
 from pathlib import Path
+from typing import Tuple, List
 
 # Use your old image path
 IMAGE_DIR = Path(__file__).parent.parent / "images"
@@ -124,7 +125,7 @@ def assign_markers_to_zones(image, debug=False):
         return {} if not debug else ({}, image.copy())
 
     zones = compute_zones(marker_dict)
-    excluded_ids = [0, 1, 2, 3, 4]
+    excluded_ids = [0, 1, 2, 3, 4, 5]
 
     result = {}
     debug_image = image.copy() if debug else None
@@ -163,20 +164,41 @@ def assign_markers_to_zones(image, debug=False):
         return result
 
 
+def get_state(image: cv2.Mat) -> Tuple[List, List, List]:
+    markers_in_zones, _ = assign_markers_to_zones(img, debug=True)
+    storage = []
+    proposed = []
+    accepted = []
+
+    for marker, zone in markers_in_zones.items():
+        if zone == "Zone1":
+            storage.append(marker)
+        elif zone == "Zone2":
+            proposed.append(marker)
+        elif zone == "Zone3":
+            accepted.append(marker)
+    return storage, proposed, accepted
+
+
 # --- Example usage ---
 if __name__ == "__main__":
     img = cv2.imread(str(TEST_IMAGE_PATH))
-    markers_in_zones, debug_img = assign_markers_to_zones(img, debug=True)
-    print("Marker assignments:", markers_in_zones)
+    storage, proposed, accepted = get_state(img)
+    print("Storage:", storage)
+    print("Proposed:", proposed)
+    print("Accepted:", accepted)
+    # markers_in_zones, debug_img = assign_markers_to_zones(img, debug=True)
+    # print("Marker assignments:", markers_in_zones)
+    # cv2.imwrite("zones_debug.jpg", debug_img)
 
-    # Show debug image
-    max_height = 800  # maximum height in pixels
-    max_width = 1200  # maximum width in pixels
+    # # Show debug image
+    # max_height = 800  # maximum height in pixels
+    # max_width = 1200  # maximum width in pixels
 
-    h, w = debug_img.shape[:2]
-    scale = min(max_width / w, max_height / h, 1.0)  # don't upscale if smaller
-    display_img = cv2.resize(debug_img, (int(w*scale), int(h*scale)))
+    # h, w = debug_img.shape[:2]
+    # scale = min(max_width / w, max_height / h, 1.0)  # don't upscale if smaller
+    # display_img = cv2.resize(debug_img, (int(w*scale), int(h*scale)))
 
-    cv2.imshow("Zones Debug", display_img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow("Zones Debug", display_img)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()

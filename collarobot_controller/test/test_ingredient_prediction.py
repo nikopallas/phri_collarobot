@@ -1,12 +1,14 @@
 import pytest
-from collarobot_controller.models import (
+from collarobot_controller.collarobot_controller.models import (
     RECIPES,
     INGREDIENTS,
     recipe_distribution,
     predict_recipe,
     suggest_ingredient,
     decide,
-    predict
+    predict,
+    get_ingredient_id,
+    get_ingredient_name
 )
 
 
@@ -357,3 +359,15 @@ def test_wild_convergence(offset):
     recipe_ings = set(RECIPES[current_recipe]["ingredients"])
     for ing in accepted:
         assert ing in recipe_ings, f"Ingredient '{ing}' not in '{current_recipe}'"
+
+
+def test_ingredient_id_mapping():
+    """Test that ingredient names map correctly to IDs and vice versa."""
+    # Test a few known mappings
+    assert get_ingredient_id("beans") == 6
+    assert get_ingredient_id("tomato") == 24
+    assert get_ingredient_id("non-existent") is None
+
+    assert get_ingredient_name(6) == "beans"
+    assert get_ingredient_name(24) == "tomato"
+    assert get_ingredient_name(999) is None

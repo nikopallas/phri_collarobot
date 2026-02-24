@@ -13,7 +13,7 @@ INGREDIENTS_PATH = DATA_DIR / "ingredients.json"
 
 RECIPES_PATH = DATA_DIR / "recipes.json"
 with open(INGREDIENTS_PATH) as f:
-    INGREDIENTS = json.load(f)
+    INGREDIENTS = list(json.load(f).keys())
 
 with open(RECIPES_PATH) as f:
     RECIPES = json.load(f)
