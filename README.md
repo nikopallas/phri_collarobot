@@ -5,6 +5,7 @@ ROS2 Jazzy workspace for a **Kinova Gen3 6-DOF arm** with **Robotiq gripper** an
 ---
 
 ## Table of Contents
+
 1. [System Overview](#system-overview)
 2. [Package Structure](#package-structure)
 3. [Build](#build)
@@ -129,13 +130,13 @@ time_from_start = 2.5
 
 ### Positions used in the sequence
 
-| Name | Role | Notes |
-|---|---|---|
-| `pre_pick` | Approach height above object | Also used as **retreat** after picking |
-| `pick` | At the object, gripper open | Gripper closes here |
-| `home` | Safe neutral transit pose | Arm passes through here between pick and place zones |
-| `pre_place` | Approach height above target | Also used as **retreat** after placing |
-| `place` | At the place target | Gripper opens here |
+| Name        | Role                         | Notes                                                |
+| ----------- | ---------------------------- | ---------------------------------------------------- |
+| `pre_pick`  | Approach height above object | Also used as **retreat** after picking               |
+| `pick`      | At the object, gripper open  | Gripper closes here                                  |
+| `home`      | Safe neutral transit pose    | Arm passes through here between pick and place zones |
+| `pre_place` | Approach height above target | Also used as **retreat** after placing               |
+| `place`     | At the place target          | Gripper opens here                                   |
 
 > `post_pick` and `post_place` are not separate positions — the arm simply retraces back to `pre_pick` / `pre_place`.
 
@@ -190,6 +191,7 @@ ros2 run collarobot_actions record_position place     --time 2.5
 ```
 
 Each call:
+
 1. Reads the current `/joint_states`
 2. Waits 0.5 s for carriage/lift topics to deliver a value (saves them if available)
 3. Writes the entry to `positions.toml`, overwriting only that position
@@ -214,11 +216,13 @@ ros2 run collarobot_actions goto_position pick
 ### Step 5 — Run Pick-and-Place
 
 **Terminal 1** — start the action server:
+
 ```bash
 ros2 run collarobot_actions pick_place_node
 ```
 
 **Terminal 2** — trigger the sequence with live step feedback:
+
 ```bash
 ros2 action send_goal --feedback /pick_place_node/pick_place \
     collarobot_msgs/action/PickPlace '{}'
@@ -232,12 +236,12 @@ To cancel mid-sequence press `Ctrl+C` in the terminal running `send_goal`.
 
 ## CLI Tools Reference
 
-| Command | Description |
-|---|---|
-| `record_position <name> [--time SECS]` | Capture current joints + carriage/lift to TOML |
-| `goto_position <name>` | Move arm to a named position (exits when done) |
-| `goto_carriage_lift <name>` | Move carriage/lift to a named position's values (waits for arrival) |
-| `test_gripper <value> [--effort N]` | Send a single gripper command and report the result |
+| Command                                | Description                                                         |
+| -------------------------------------- | ------------------------------------------------------------------- |
+| `record_position <name> [--time SECS]` | Capture current joints + carriage/lift to TOML                      |
+| `goto_position <name>`                 | Move arm to a named position (exits when done)                      |
+| `goto_carriage_lift <name>`            | Move carriage/lift to a named position's values (waits for arrival) |
+| `test_gripper <value> [--effort N]`    | Send a single gripper command and report the result                 |
 
 ---
 
@@ -277,13 +281,13 @@ Any exception at any step immediately aborts the action with `success: False` an
 
 ## ROS Topics and Actions
 
-| Type | Name | Message | Direction |
-|---|---|---|---|
-| Action server | `/pick_place_node/pick_place` | `collarobot_msgs/PickPlace` | in |
-| Publisher | `/joint_trajectory_controller/joint_trajectory` | `trajectory_msgs/JointTrajectory` | out |
-| Action client | `/robotiq_gripper_controller/gripper_cmd` | `control_msgs/GripperCommand` | out |
-| Subscriber | `/joint_states` | `sensor_msgs/JointState` | in |
-| Subscriber | `/elmo/id1/carriage/position/get` | `std_msgs/Float32` | in |
-| Subscriber | `/elmo/id1/lift/position/get` | `std_msgs/Float32` | in |
-| Publisher | `/elmo/id1/carriage/position/set` | `std_msgs/Float32` | out (`goto_carriage_lift` only) |
-| Publisher | `/elmo/id1/lift/position/set` | `std_msgs/Float32` | out (`goto_carriage_lift` only) |
+| Type          | Name                                            | Message                           | Direction                       |
+| ------------- | ----------------------------------------------- | --------------------------------- | ------------------------------- |
+| Action server | `/pick_place_node/pick_place`                   | `collarobot_msgs/PickPlace`       | in                              |
+| Publisher     | `/joint_trajectory_controller/joint_trajectory` | `trajectory_msgs/JointTrajectory` | out                             |
+| Action client | `/robotiq_gripper_controller/gripper_cmd`       | `control_msgs/GripperCommand`     | out                             |
+| Subscriber    | `/joint_states`                                 | `sensor_msgs/JointState`          | in                              |
+| Subscriber    | `/elmo/id1/carriage/position/get`               | `std_msgs/Float32`                | in                              |
+| Subscriber    | `/elmo/id1/lift/position/get`                   | `std_msgs/Float32`                | in                              |
+| Publisher     | `/elmo/id1/carriage/position/set`               | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |
+| Publisher     | `/elmo/id1/lift/position/set`                   | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |

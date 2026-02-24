@@ -162,7 +162,7 @@ def main(args=None):
     node = GotoCarriageLiftNode(parsed.name, carriage_target, lift_target)
 
     while rclpy.ok() and not node._done:
-        rclpy.spin_once(node)
+        rclpy.spin_once(node, timeout_sec=0.05)
 
     node.destroy_node()
     rclpy.shutdown()
