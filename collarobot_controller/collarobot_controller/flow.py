@@ -45,7 +45,7 @@ while True:
     # --- PHASE 1: AI ACTION (Move XOR Suggest) ---
     available = set(INGREDIENTS) - (accepted | rejected | proposed)
     action, ingredient = pick_action(accepted, proposed, available, rejected, excluded)
-    
+
     if action != "skip":
         any_action_taken = True
         if action == "rejected":

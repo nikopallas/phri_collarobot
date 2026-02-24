@@ -3,9 +3,11 @@ kagglehub
 pandas
 numpy
 scipy
+opencv-python
 
 # Development & Testing dependencies
 flake8
 flake8-pyproject
 pytest
 pytest-mock
+

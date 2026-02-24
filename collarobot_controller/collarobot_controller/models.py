@@ -323,8 +323,6 @@ def pick_action(
     if excluded is None:
         excluded = set()
 
-
-
     # 1a. AI Move: Try to move an ingredient from Proposed to Accepted/Rejected
     if proposed:
         decisions = decide(accepted, rejected, proposed, excluded)
@@ -358,6 +356,3 @@ def pick_action(
             return "proposed", ingredient
 
     return "skip", None
-
-
-

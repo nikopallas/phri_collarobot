@@ -14,6 +14,7 @@ OUTPUT = "aruco_5cm_with_names.pdf"
 TARGET_SIZE_MM = 50  # exact 5 cm
 MARKERS_PER_ROW = 3
 
+
 # -----------------------------
 # Helper: extract numeric ID
 # -----------------------------
@@ -21,6 +22,7 @@ def extract_id(filename):
     name_no_ext = os.path.splitext(filename)[0]
     match = re.search(r"(\d+)$", name_no_ext)
     return int(match.group(1)) if match else -1
+
 
 # -----------------------------
 # Collect and sort SVG files
