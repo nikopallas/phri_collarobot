@@ -1,0 +1,711 @@
+{
+    "Spaghetti Tomato": {
+        "ingredients": [
+            "spaghetti",
+            "tomato",
+            "garlic",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook spaghetti in salted water",
+            "Heat olive oil, add garlic",
+            "Add tomato, simmer",
+            "Mix with spaghetti and salt"
+        ]
+    },
+    "Spaghetti Cheese": {
+        "ingredients": [
+            "spaghetti",
+            "cheese",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Cook spaghetti",
+            "Melt butter",
+            "Add spaghetti and cheese",
+            "Season with salt"
+        ]
+    },
+    "Spaghetti Bolognese": {
+        "ingredients": [
+            "spaghetti",
+            "beef",
+            "tomato",
+            "onion",
+            "garlic",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook spaghetti",
+            "Fry beef with onion and garlic",
+            "Add tomato and simmer",
+            "Combine with spaghetti"
+        ]
+    },
+    "Chicken Rice": {
+        "ingredients": [
+            "chicken",
+            "rice",
+            "onion",
+            "garlic",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Fry chicken with onion and garlic",
+            "Add olive oil and salt",
+            "Serve chicken over rice"
+        ]
+    },
+    "Fried Rice": {
+        "ingredients": [
+            "rice",
+            "eggs",
+            "onion",
+            "carrot",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice and let cool",
+            "Fry onion and carrot",
+            "Add eggs, then rice",
+            "Season with salt"
+        ]
+    },
+    "Rice Beans": {
+        "ingredients": [
+            "rice",
+            "beans",
+            "onion",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Cook beans with onion and garlic",
+            "Mix together",
+            "Season with salt"
+        ]
+    },
+    "Mashed Potatoes": {
+        "ingredients": [
+            "potatoes",
+            "milk",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Boil potatoes",
+            "Mash with milk and butter",
+            "Add salt"
+        ]
+    },
+    "Roasted Potatoes": {
+        "ingredients": [
+            "potatoes",
+            "olive_oil",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cut potatoes",
+            "Toss with olive oil and garlic",
+            "Roast until golden",
+            "Add salt"
+        ]
+    },
+    "Chicken Potatoes": {
+        "ingredients": [
+            "chicken",
+            "potatoes",
+            "olive_oil",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cook potatoes",
+            "Fry chicken with garlic",
+            "Add olive oil and salt",
+            "Serve together"
+        ]
+    },
+    "Beef Stew": {
+        "ingredients": [
+            "beef",
+            "potatoes",
+            "carrot",
+            "onion",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Brown beef",
+            "Add potatoes, carrot, onion, garlic",
+            "Simmer until tender",
+            "Season with salt"
+        ]
+    },
+    "Omelette": {
+        "ingredients": [
+            "eggs",
+            "milk",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Beat eggs with milk",
+            "Heat butter",
+            "Cook eggs gently",
+            "Add salt"
+        ]
+    },
+    "Cheese Omelette": {
+        "ingredients": [
+            "eggs",
+            "cheese",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Beat eggs",
+            "Cook in butter",
+            "Add cheese",
+            "Fold and season"
+        ]
+    },
+    "Tomato Soup": {
+        "ingredients": [
+            "tomato",
+            "onion",
+            "garlic",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Fry onion and garlic",
+            "Add tomato",
+            "Simmer and blend",
+            "Season with salt"
+        ]
+    },
+    "Bean Soup": {
+        "ingredients": [
+            "beans",
+            "carrot",
+            "onion",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cook beans",
+            "Add carrot, onion, garlic",
+            "Simmer",
+            "Season with salt"
+        ]
+    },
+    "Chicken Soup": {
+        "ingredients": [
+            "chicken",
+            "carrot",
+            "onion",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Boil chicken",
+            "Add carrot, onion, garlic",
+            "Simmer",
+            "Season with salt"
+        ]
+    },
+    "Beef Rice Bowl": {
+        "ingredients": [
+            "beef",
+            "rice",
+            "onion",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Fry beef with onion",
+            "Add olive oil and salt",
+            "Serve over rice"
+        ]
+    },
+    "Chicken Sandwich": {
+        "ingredients": [
+            "bread",
+            "chicken",
+            "cheese",
+            "tomato"
+        ],
+        "instructions": [
+            "Cook chicken",
+            "Slice bread",
+            "Add chicken, cheese, tomato",
+            "Assemble"
+        ]
+    },
+    "Cheese Sandwich": {
+        "ingredients": [
+            "bread",
+            "cheese",
+            "butter"
+        ],
+        "instructions": [
+            "Butter bread",
+            "Add cheese",
+            "Close sandwich"
+        ]
+    },
+    "Egg Sandwich": {
+        "ingredients": [
+            "bread",
+            "eggs",
+            "butter"
+        ],
+        "instructions": [
+            "Fry eggs",
+            "Butter bread",
+            "Add eggs",
+            "Assemble"
+        ]
+    },
+    "Tomato Sandwich": {
+        "ingredients": [
+            "bread",
+            "tomato",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Slice tomato",
+            "Drizzle olive oil",
+            "Add salt",
+            "Assemble on bread"
+        ]
+    },
+    "Garlic Bread": {
+        "ingredients": [
+            "bread",
+            "garlic",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Mix butter and garlic",
+            "Spread on bread",
+            "Bake until golden",
+            "Add salt"
+        ]
+    },
+    "Pancakes": {
+        "ingredients": [
+            "flour",
+            "eggs",
+            "milk",
+            "sugar"
+        ],
+        "instructions": [
+            "Mix flour, eggs, milk, sugar",
+            "Heat pan",
+            "Fry batter on both sides"
+        ]
+    },
+    "Savory Pancakes": {
+        "ingredients": [
+            "flour",
+            "eggs",
+            "milk",
+            "salt"
+        ],
+        "instructions": [
+            "Mix flour, eggs, milk, salt",
+            "Heat pan",
+            "Fry until golden"
+        ]
+    },
+    "Flatbread": {
+        "ingredients": [
+            "flour",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Mix flour, olive oil, salt",
+            "Knead dough",
+            "Cook in pan until browned"
+        ]
+    },
+    "Fried Eggs": {
+        "ingredients": [
+            "eggs",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Heat butter",
+            "Fry eggs",
+            "Add salt"
+        ]
+    },
+    "Scrambled Eggs": {
+        "ingredients": [
+            "eggs",
+            "milk",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Beat eggs with milk",
+            "Melt butter",
+            "Stir eggs gently",
+            "Add salt"
+        ]
+    },
+    "Chicken Pasta": {
+        "ingredients": [
+            "spaghetti",
+            "chicken",
+            "olive_oil",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cook spaghetti",
+            "Fry chicken with garlic",
+            "Add olive oil and salt",
+            "Mix with pasta"
+        ]
+    },
+    "Bean Pasta": {
+        "ingredients": [
+            "spaghetti",
+            "beans",
+            "tomato",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cook spaghetti",
+            "Heat beans with tomato and garlic",
+            "Mix with pasta",
+            "Season with salt"
+        ]
+    },
+    "Beef Pasta": {
+        "ingredients": [
+            "spaghetti",
+            "beef",
+            "tomato",
+            "onion",
+            "salt"
+        ],
+        "instructions": [
+            "Cook spaghetti",
+            "Fry beef with onion",
+            "Add tomato",
+            "Mix with pasta"
+        ]
+    },
+    "Veggie Rice": {
+        "ingredients": [
+            "rice",
+            "carrot",
+            "onion",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Fry onion and carrot",
+            "Add olive oil and salt",
+            "Mix together"
+        ]
+    },
+    "Rice with Eggs": {
+        "ingredients": [
+            "rice",
+            "eggs",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Scramble eggs in butter",
+            "Mix with rice",
+            "Add salt"
+        ]
+    },
+    "Beans with Cheese": {
+        "ingredients": [
+            "beans",
+            "cheese",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Heat beans",
+            "Add cheese",
+            "Drizzle olive oil",
+            "Add salt"
+        ]
+    },
+    "Baked Beans": {
+        "ingredients": [
+            "beans",
+            "tomato",
+            "onion",
+            "salt"
+        ],
+        "instructions": [
+            "Cook beans",
+            "Add tomato and onion",
+            "Simmer",
+            "Season with salt"
+        ]
+    },
+    "Chicken Tomato": {
+        "ingredients": [
+            "chicken",
+            "tomato",
+            "olive_oil",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Fry chicken",
+            "Add garlic",
+            "Add tomato",
+            "Simmer and salt"
+        ]
+    },
+    "Beef Tomato": {
+        "ingredients": [
+            "beef",
+            "tomato",
+            "onion",
+            "salt"
+        ],
+        "instructions": [
+            "Fry beef",
+            "Add onion",
+            "Add tomato",
+            "Simmer and salt"
+        ]
+    },
+    "Cheesy Potatoes": {
+        "ingredients": [
+            "potatoes",
+            "cheese",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Cook potatoes",
+            "Add butter and cheese",
+            "Melt together",
+            "Add salt"
+        ]
+    },
+    "Potato Soup": {
+        "ingredients": [
+            "potatoes",
+            "onion",
+            "milk",
+            "salt"
+        ],
+        "instructions": [
+            "Boil potatoes and onion",
+            "Add milk",
+            "Simmer",
+            "Add salt"
+        ]
+    },
+    "Carrot Soup": {
+        "ingredients": [
+            "carrot",
+            "onion",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Boil carrot and onion",
+            "Add garlic",
+            "Blend",
+            "Add salt"
+        ]
+    },
+    "Chicken Beans": {
+        "ingredients": [
+            "chicken",
+            "beans",
+            "onion",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cook chicken",
+            "Add beans, onion, garlic",
+            "Simmer",
+            "Add salt"
+        ]
+    },
+    "Beef Beans": {
+        "ingredients": [
+            "beef",
+            "beans",
+            "onion",
+            "garlic",
+            "salt"
+        ],
+        "instructions": [
+            "Cook beef",
+            "Add beans, onion, garlic",
+            "Simmer",
+            "Add salt"
+        ]
+    },
+    "Rice Milk": {
+        "ingredients": [
+            "rice",
+            "milk",
+            "sugar"
+        ],
+        "instructions": [
+            "Cook rice in milk",
+            "Add sugar",
+            "Simmer until soft"
+        ]
+    },
+    "Sweet Bread": {
+        "ingredients": [
+            "bread",
+            "butter",
+            "sugar"
+        ],
+        "instructions": [
+            "Butter bread",
+            "Sprinkle sugar",
+            "Serve or toast"
+        ]
+    },
+    "Cheesy Rice": {
+        "ingredients": [
+            "rice",
+            "cheese",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Add butter and cheese",
+            "Stir until melted",
+            "Add salt"
+        ]
+    },
+    "Chicken Omelette": {
+        "ingredients": [
+            "eggs",
+            "chicken",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Cook chicken",
+            "Beat eggs",
+            "Cook eggs in butter",
+            "Add chicken and salt"
+        ]
+    },
+    "Veggie Omelette": {
+        "ingredients": [
+            "eggs",
+            "onion",
+            "carrot",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Fry onion and carrot",
+            "Add beaten eggs",
+            "Cook gently",
+            "Add salt"
+        ]
+    },
+    "Tomato Eggs": {
+        "ingredients": [
+            "eggs",
+            "tomato",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Fry tomato in olive oil",
+            "Add eggs",
+            "Cook until set",
+            "Add salt"
+        ]
+    },
+    "Garlic Rice": {
+        "ingredients": [
+            "rice",
+            "garlic",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Fry garlic in olive oil",
+            "Mix with rice",
+            "Add salt"
+        ]
+    },
+    "Butter Pasta": {
+        "ingredients": [
+            "spaghetti",
+            "butter",
+            "salt"
+        ],
+        "instructions": [
+            "Cook spaghetti",
+            "Melt butter",
+            "Mix with pasta",
+            "Add salt"
+        ]
+    },
+    "Simple Salad": {
+        "ingredients": [
+            "tomato",
+            "onion",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Slice tomato and onion",
+            "Add olive oil",
+            "Add salt",
+            "Mix"
+        ]
+    },
+    "Beans Rice Bowl": {
+        "ingredients": [
+            "rice",
+            "beans",
+            "olive_oil",
+            "salt"
+        ],
+        "instructions": [
+            "Cook rice",
+            "Heat beans",
+            "Add olive oil and salt",
+            "Serve together"
+        ]
+    }
+}
