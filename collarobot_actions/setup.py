@@ -11,6 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name, [package_name + '/positions.toml']),
+        ('share/' + package_name, [package_name + '/gestures.toml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -26,10 +27,11 @@ setup(
     entry_points={
         'console_scripts': [
             'pick_place_node = collarobot_actions.pick_place_node:main',
-            'record_position = collarobot_actions.record_position:main',
-            'goto_position = collarobot_actions.goto_position:main',
-            'goto_carriage_lift = collarobot_actions.goto_carriage_lift:main',
-            'test_gripper = collarobot_actions.test_gripper:main',
+            'record_position = collarobot_actions.utils.record_position:main',
+            'goto_position = collarobot_actions.utils.goto_position:main',
+            'goto_carriage_lift = collarobot_actions.utils.goto_carriage_lift:main',
+            'test_gripper = collarobot_actions.utils.test_gripper:main',
+            'gesture_node = collarobot_actions.gesture_node:main',
         ],
     },
 )
