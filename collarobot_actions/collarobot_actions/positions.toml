@@ -1,38 +1,44 @@
-# Named positions for the Kinova Gen3 pick-and-place.
-# joints:          [joint_1..joint_6] in radians
-# time_from_start: seconds for the arm to reach this position
-# carriage:        optional — Float32 setpoint for /elmo/id1/carriage/position/set
-# lift:            optional — Float32 setpoint for /elmo/id1/lift/position/set
-#
-# Record any position with (carriage + lift captured automatically if available):
-#   ros2 run collarobot_actions record_position <name> [--time SECS]
-
-# Gripper positions (normalised: 0.0 = fully open, 1.0 = fully closed)
-# Calibrate gripper_close with: ros2 run collarobot_actions test_gripper <value>
-gripper_open = 0.0
-gripper_close = 0.8
+gripper_open = 0.35
+gripper_close = 0.55
 
 [pre_pick]
-# Approach height above the pick object — also used as retreat after picking
-joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-time_from_start = 5.0
+joints = [-1.142882, -1.219199, -1.345714, 0.989958, -1.410006, -1.670422]
+time_from_start = 3.0
+carriage = 0.1000
+lift = 0.4000
 
 [pick]
-# At the object, gripper open, ready to close
-joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+joints = [-1.346116, -0.981415, -1.057587, 1.319914, -1.072331, -1.693212]
 time_from_start = 3.0
+carriage = 0.1000
+lift = 0.4000
 
 [home]
-# Safe neutral transit pose between pick zone and place zone
-joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-time_from_start = 5.0
+joints = [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807]
+time_from_start = 3.0
+carriage = 0.1000
+lift = 0.4000
 
 [pre_place]
-# Approach height above the place target — also used as retreat after placing
-joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-time_from_start = 5.0
+joints = [0.502034, -1.151201, -1.656260, -0.578052, -1.154697, -1.224507]
+time_from_start = 3.0
+carriage = 0.1000
+lift = 0.4000
 
 [place]
-# At the place target, gripper closed, ready to open
-joints = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+joints = [0.502002, -0.745842, -1.318265, -1.271452, -0.845231, -0.921659]
 time_from_start = 3.0
+carriage = 0.1000
+lift = 0.4000
+
+[test01]
+joints = [-0.231941, -0.461522, -1.405688, -0.520736, -0.697799, -1.166368]
+time_from_start = 3.0
+carriage = 0.1000
+lift = 0.4000
+
+[test02]
+joints = [0.095259, -0.970232, -1.906356, -0.220709, -0.375456, -1.524704]
+time_from_start = 3.0
+carriage = 0.1000
+lift = 0.4000
