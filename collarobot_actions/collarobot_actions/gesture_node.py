@@ -45,7 +45,7 @@ POSITIONS_PATH = (
 class GestureNode(Node):
 
     def __init__(self):
-        super().__init__('gesture_node')
+        super().__init__('gesture_node', namespace='collarobot')
 
         with open(GESTURES_PATH, 'rb') as f:
             self._gestures = tomllib.load(f)
@@ -59,7 +59,7 @@ class GestureNode(Node):
         cb = ReentrantCallbackGroup()
 
         self._traj_pub = self.create_publisher(
-            JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10
+            JointTrajectory, 'joint_trajectory_controller/joint_trajectory', 10
         )
 
         self._busy = False

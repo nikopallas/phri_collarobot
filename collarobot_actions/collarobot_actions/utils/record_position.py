@@ -65,7 +65,7 @@ def _save_positions(positions: dict) -> None:
 class RecordPositionNode(Node):
 
     def __init__(self, position_name: str, time_from_start: float):
-        super().__init__('record_position')
+        super().__init__('record_position', namespace='collarobot')
         self._name = position_name
         self._time = time_from_start
         self._done = False
@@ -73,12 +73,12 @@ class RecordPositionNode(Node):
         self._carriage = None
         self._lift = None
 
-        self.create_subscription(JointState, '/joint_states', self._on_joints, 10)
+        self.create_subscription(JointState, 'joint_states', self._on_joints, 10)
         self.create_subscription(
-            Float32, '/elmo/id1/carriage/position/get', self._on_carriage, 10
+            Float32, 'elmo/id1/carriage/position/get', self._on_carriage, 10
         )
         self.create_subscription(
-            Float32, '/elmo/id1/lift/position/get', self._on_lift, 10
+            Float32, 'elmo/id1/lift/position/get', self._on_lift, 10
         )
         self.get_logger().info(
             f'Waiting for /joint_states to record "{position_name}" '

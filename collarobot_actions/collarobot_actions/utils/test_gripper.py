@@ -21,14 +21,14 @@ from control_msgs.action import GripperCommand
 from rclpy.action import ActionClient
 from rclpy.node import Node
 
-GRIPPER_ACTION = '/robotiq_gripper_controller/gripper_cmd'
+GRIPPER_ACTION = 'robotiq_gripper_controller/gripper_cmd'
 DEFAULT_EFFORT = 50.0
 
 
 class TestGripperNode(Node):
 
     def __init__(self, position: float, effort: float):
-        super().__init__('test_gripper')
+        super().__init__('test_gripper', namespace='collarobot')
         self._client = ActionClient(self, GripperCommand, GRIPPER_ACTION)
         self._position = position
         self._effort = effort
