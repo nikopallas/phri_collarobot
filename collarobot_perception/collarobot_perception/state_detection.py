@@ -9,7 +9,7 @@ import json
 from std_msgs.msg import String
 
 IMAGE_DIR = Path(__file__).parent.parent / "images"
-TEST_IMAGE_PATH = IMAGE_DIR / "captured_test.png"
+TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/three_objects.png").expanduser()
 
 
 class StatePublisher(Node):
