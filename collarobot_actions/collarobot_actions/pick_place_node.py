@@ -48,7 +48,7 @@ POSITIONS_PATH = (
 class PickPlaceNode(Node):
 
     def __init__(self):
-        super().__init__('pick_place_node')
+        super().__init__('pick_place_node', namespace='collarobot')
 
         with open(POSITIONS_PATH, 'rb') as f:
             self._positions = tomllib.load(f)

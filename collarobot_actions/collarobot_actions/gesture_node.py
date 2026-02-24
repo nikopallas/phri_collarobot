@@ -45,7 +45,7 @@ POSITIONS_PATH = (
 class GestureNode(Node):
 
     def __init__(self):
-        super().__init__('gesture_node')
+        super().__init__('gesture_node', namespace='collarobot')
 
         with open(GESTURES_PATH, 'rb') as f:
             self._gestures = tomllib.load(f)
