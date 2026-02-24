@@ -50,7 +50,6 @@ def test_get_state_sorting():
     # 9 -> Zone1 (storage)
     # 17 -> Zone2 (proposed)
     # 13 -> Zone3 (accepted)
-   
     assert set(storage) == {12, 9}
     assert set(proposed) == {17}
     assert set(accepted) == {13}
