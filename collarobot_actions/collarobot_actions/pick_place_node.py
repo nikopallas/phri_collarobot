@@ -2,26 +2,26 @@
 Pick-and-place action server for Kinova Gen3 + Robotiq gripper.
 
 Sequence (any exception → action aborted):
-  PRE_PICK → PICKING → POST_PICK → HOME → PRE_PLACE → PLACING → POST_PLACE
+  pre_<pick> → pick → pre_<pick> → home → pre_<place> → place → pre_<place>
 
-  POST_PICK  reuses the pre_pick  position (retreat to approach height)
-  POST_PLACE reuses the pre_place position (retreat to approach height)
-  HOME is a safe neutral transit pose between the pick and place zones.
+  Pre-positions fall back to "home" if not found in positions.toml.
+  Pick/place positions default to "pick"/"place" if not specified in goal.
 
 Before starting, the node verifies that carriage and lift are within tolerance of
 the values recorded in the 'home' position (if carriage/lift were recorded there).
+Pass ignore_carriage=true in the goal to skip the carriage axis check.
 The operator must set carriage and lift manually; use goto_carriage_lift to command them.
 Gripper values are read from positions.toml (gripper_open / gripper_close).
 
 Action client:
   ros2 action send_goal --feedback /pick_place_node/pick_place \\
-      collarobot_msgs/action/PickPlace '{}'
+      collarobot_msgs/action/PickPlace \\
+      '{ignore_carriage: false, pick_position: "", place_position: ""}'
 """
 
 import threading
 import time
 import tomllib
-from enum import Enum, auto
 from pathlib import Path
 
 import rclpy
@@ -41,27 +41,6 @@ POSITIONS_PATH = (
     Path.home() / 'collarobot_ws' / 'src' / 'collarobot_actions'
     / 'collarobot_actions' / 'positions.toml'
 )
-
-
-class Step(Enum):
-    PRE_PICK = auto()
-    PICKING = auto()
-    POST_PICK = auto()
-    HOME = auto()
-    PRE_PLACE = auto()
-    PLACING = auto()
-    POST_PLACE = auto()
-
-
-SEQUENCE = [
-    Step.PRE_PICK,
-    Step.PICKING,
-    Step.POST_PICK,
-    Step.HOME,
-    Step.PRE_PLACE,
-    Step.PLACING,
-    Step.POST_PLACE,
-]
 
 
 class PickPlaceNode(Node):
@@ -134,12 +113,19 @@ class PickPlaceNode(Node):
         return CancelResponse.ACCEPT
 
     def _execute_callback(self, goal_handle):
-        self.get_logger().info('Pick-and-place started')
+        pick_pos = goal_handle.request.pick_position or 'pick'
+        place_pos = goal_handle.request.place_position or 'place'
+        ignore_carriage = goal_handle.request.ignore_carriage
+        self.get_logger().info(
+            f'Pick-and-place started: pick="{pick_pos}" place="{place_pos}" '
+            f'ignore_carriage={ignore_carriage}'
+        )
         result = PickPlace.Result()
-        step = None
+        current_step = None
         try:
-            self._check_setup()
-            for step in SEQUENCE:
+            self._check_setup(ignore_carriage=ignore_carriage)
+            sequence = self._build_sequence(pick_pos, place_pos)
+            for pos_name, gripper_action in sequence:
                 if goal_handle.is_cancel_requested:
                     self.get_logger().info('Cancelled')
                     goal_handle.canceled()
@@ -147,18 +133,19 @@ class PickPlaceNode(Node):
                     result.message = 'Cancelled'
                     return result
 
+                current_step = pos_name
                 fb = PickPlace.Feedback()
-                fb.state = step.name
+                fb.state = pos_name
                 goal_handle.publish_feedback(fb)
-                self.get_logger().info(f'Step -> {step.name}')
-                self._execute_step(step)
+                self.get_logger().info(f'Step -> {pos_name}')
+                self._execute_step(pos_name, gripper_action)
 
             goal_handle.succeed()
             result.success = True
             result.message = 'Pick-and-place complete'
 
         except Exception as exc:
-            where = step.name if step is not None else 'setup check'
+            where = current_step if current_step is not None else 'setup check'
             self.get_logger().error(f'Error in {where}: {exc}')
             goal_handle.abort()
             result.success = False
@@ -180,12 +167,13 @@ class PickPlaceNode(Node):
     def _on_lift(self, msg: Float32):
         self._lift_pos = msg.data
 
-    def _check_setup(self):
+    def _check_setup(self, ignore_carriage=False):
         """Verify carriage and lift are at the positions recorded for 'home'.
 
         Raises RuntimeError with a descriptive message if any axis is out of
         tolerance so the operator knows what to adjust.  If carriage/lift were
         not recorded in the home entry, the check is silently skipped.
+        Pass ignore_carriage=True to skip the carriage axis entirely.
         """
         home = self._positions.get('home', {})
         issues = []
@@ -194,6 +182,8 @@ class PickPlaceNode(Node):
             ('carriage', 'carriage', self._carriage_pos),
             ('lift',     'lift',     self._lift_pos),
         ]:
+            if ignore_carriage and axis == 'carriage':
+                continue
             if stored_key not in home:
                 continue  # not recorded for this setup — skip
             expected = float(home[stored_key])
@@ -218,23 +208,25 @@ class PickPlaceNode(Node):
     # Step execution
     # ------------------------------------------------------------------
 
-    def _execute_step(self, step: Step):
-        if step == Step.PRE_PICK:
-            self._move_to('pre_pick')
-        elif step == Step.PICKING:
-            self._move_to('pick')
-            self._gripper(self._gripper_close)
-        elif step == Step.POST_PICK:
-            self._move_to('pre_pick')   # retreat to approach height (same position)
-        elif step == Step.HOME:
-            self._move_to('home')
-        elif step == Step.PRE_PLACE:
-            self._move_to('pre_place')
-        elif step == Step.PLACING:
-            self._move_to('place')
-            self._gripper(self._gripper_open)
-        elif step == Step.POST_PLACE:
-            self._move_to('pre_place')  # retreat to approach height (same position)
+    def _build_sequence(self, pick_pos, place_pos):
+        pre_pick = f'pre_{pick_pos}' if f'pre_{pick_pos}' in self._positions else 'home'
+        pre_place = f'pre_{place_pos}' if f'pre_{place_pos}' in self._positions else 'home'
+        return [
+            (pre_pick,  None),
+            (pick_pos,  'close'),
+            (pre_pick,  None),
+            ('home',    None),
+            (pre_place, None),
+            (place_pos, 'open'),
+            (pre_place, None),
+        ]
+
+    def _execute_step(self, pos_name: str, gripper_action):
+        self._move_to(pos_name)
+        if gripper_action is not None:
+            time.sleep(1.0)  # settle delay before gripping
+            self._gripper(self._gripper_close if gripper_action == 'close'
+                          else self._gripper_open)
 
     # ------------------------------------------------------------------
     # Motion helpers
