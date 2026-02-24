@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'opencv-contrib-python', 'reportlab', 'svglib'],
     zip_safe=True,
     maintainer='phri3',
     maintainer_email='phri3',

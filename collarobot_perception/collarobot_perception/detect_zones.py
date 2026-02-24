@@ -164,7 +164,7 @@ def assign_markers_to_zones(image, debug=False):
         return result
 
 
-def get_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List]:
+def get_state(image, debug=False) -> Tuple[List, List, List]:
     if debug:
         markers_in_zones, debug_img = assign_markers_to_zones(image, debug=True)
         print("Marker assignments:", markers_in_zones)
