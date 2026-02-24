@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'state_publisher = collarobot_perception.state_detection:main',
         ],
     },
 )
