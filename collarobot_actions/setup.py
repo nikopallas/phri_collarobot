@@ -32,6 +32,7 @@ setup(
             'goto_carriage_lift = collarobot_actions.utils.goto_carriage_lift:main',
             'test_gripper = collarobot_actions.utils.test_gripper:main',
             'gesture_node = collarobot_actions.gesture_node:main',
+            'record_gesture = collarobot_actions.utils.record_gesture:main',
         ],
     },
 )
