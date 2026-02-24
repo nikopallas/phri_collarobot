@@ -1,5 +1,7 @@
 gripper_open = 0.35
 gripper_close = 0.55
+gripper_speed = 1.0        # 0.0–1.0 normalized; sent via SetParameters to controller
+gripper_max_effort = 50.0  # max effort in Newtons for GripperCommand
 
 [pre_pick]
 joints = [-1.142882, -1.219199, -1.345714, 0.989958, -1.410006, -1.670422]
