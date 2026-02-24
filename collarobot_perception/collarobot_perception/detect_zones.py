@@ -8,7 +8,7 @@ from typing import Tuple, List
 IMAGE_DIR = Path(__file__).parent.parent / "images"
 BASE_IMAGE_PATH = IMAGE_DIR / "base_template.jpeg"
 
-TEST_IMAGE_PATH = IMAGE_DIR / "three_objects.png"
+TEST_IMAGE_PATH = IMAGE_DIR / "real_img.png"
 
 
 def detect_aruco_markers(gray_image, scale=2):
@@ -164,8 +164,13 @@ def assign_markers_to_zones(image, debug=False):
         return result
 
 
-def get_state(image: cv2.Mat) -> Tuple[List, List, List]:
-    markers_in_zones, _ = assign_markers_to_zones(img, debug=True)
+def get_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List]:
+    if debug:
+        markers_in_zones, debug_img = assign_markers_to_zones(image, debug=True)
+        print("Marker assignments:", markers_in_zones)
+        cv2.imwrite("zones_debug_real.jpg", debug_img)
+    else:
+        markers_in_zones = assign_markers_to_zones(image, debug=False)
     storage = []
     proposed = []
     accepted = []
@@ -189,7 +194,6 @@ if __name__ == "__main__":
     print("Accepted:", accepted)
     # markers_in_zones, debug_img = assign_markers_to_zones(img, debug=True)
     # print("Marker assignments:", markers_in_zones)
-    # cv2.imwrite("zones_debug.jpg", debug_img)
 
     # # Show debug image
     # max_height = 800  # maximum height in pixels

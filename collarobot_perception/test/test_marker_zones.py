@@ -1,7 +1,7 @@
 
 import cv2
 from pathlib import Path
-from collarobot_perception.collarobot_perception.detect_zones import assign_markers_to_zones
+from collarobot_perception.collarobot_perception.detect_zones import assign_markers_to_zones, get_state
 
 # Path to the example image
 IMAGE_DIR = Path(__file__).parent.parent / "images"
@@ -35,3 +35,22 @@ def test_marker_zone_assignment():
     # Optional: check no extra markers are included
     extra_markers = set(assignments.keys()) - set(EXPECTED_ASSIGNMENTS.keys())
     assert not extra_markers, f"Unexpected markers detected: {extra_markers}"
+
+
+def test_get_state_sorting():
+    # Load the test image
+    img = cv2.imread(str(TEST_IMAGE_PATH))
+    assert img is not None, "Test image could not be loaded"
+
+    # Run get_state
+    storage, proposed, accepted = get_state(img, debug=False)
+
+    # Based on EXPECTED_ASSIGNMENTS:
+    # 12 -> Zone1 (storage)
+    # 9 -> Zone1 (storage)
+    # 17 -> Zone2 (proposed)
+    # 13 -> Zone3 (accepted)
+   
+    assert set(storage) == {12, 9}
+    assert set(proposed) == {17}
+    assert set(accepted) == {13}
