@@ -104,6 +104,24 @@ Service `/move_to_position` with:
 
 When implemented, `pick_place_node._move_to()` will call this service instead of publishing directly.
 
+## DDS / RMW
+ROS2 default RMW is FastDDS, which pre-allocates message buffers and silently drops
+messages that exceed the initial payload size → causes `[RTPS_READER_HISTORY Error]`
+hangs (callbacks never fire).
+
+**Fix: use CycloneDDS** (allocates dynamically, no size issues):
+```bash
+sudo apt install ros-jazzy-rmw-cyclonedds-cpp
+echo 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Root cause on this machine: MoveIt source build in `~/ws_moveit` recompiles
+`rmw_fastrtps` with PREALLOCATED_MEMORY_MODE, overriding the system version.
+CycloneDDS bypasses this entirely.
+
+Must be set in every terminal before running any ROS2 node, or added to `~/.bashrc`.
+
 ## Key decisions / lessons
 - `maintainer_email` in package.xml must be valid format (`phri3@todo.todo`) or
   ament_index silently fails → `Package not found` at runtime.
