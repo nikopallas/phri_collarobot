@@ -1,0 +1,12 @@
+# Goal
+string gesture_name
+string return_position   # position to move to after gesture ("" = skip)
+---
+# Result
+bool success
+string message
+---
+# Feedback
+string state             # e.g. "MOVING_TO_START", "EXECUTING", "RETURNING"
+int32 waypoint_index
+int32 waypoint_count
