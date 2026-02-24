@@ -28,6 +28,8 @@ import rclpy
 from builtin_interfaces.msg import Duration
 from collarobot_msgs.action import PickPlace
 from control_msgs.action import GripperCommand
+from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
+from rcl_interfaces.srv import SetParameters
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -52,10 +54,14 @@ class PickPlaceNode(Node):
             self._positions = tomllib.load(f)
         self._gripper_open = float(self._positions.get('gripper_open', 0.0))
         self._gripper_close = float(self._positions.get('gripper_close', 0.8))
+        self._gripper_speed = float(self._positions.get('gripper_speed', 1.0))
+        self._gripper_max_effort = float(self._positions.get('gripper_max_effort', 50.0))
+        self._gripper_speed_warned = False
         named = [k for k in self._positions if isinstance(self._positions[k], dict)]
         self.get_logger().info(
             f'Loaded positions: {named}  '
-            f'gripper open={self._gripper_open} close={self._gripper_close}'
+            f'gripper open={self._gripper_open} close={self._gripper_close} '
+            f'speed={self._gripper_speed} max_effort={self._gripper_max_effort}'
         )
 
         # ReentrantCallbackGroup lets the action execute_callback and the
@@ -78,6 +84,11 @@ class PickPlaceNode(Node):
 
         self._gripper_client = ActionClient(
             self, GripperCommand, '/robotiq_gripper_controller/gripper_cmd',
+            callback_group=cb,
+        )
+        self._gripper_speed_client = self.create_client(
+            SetParameters,
+            '/robotiq_gripper_controller/set_parameters',
             callback_group=cb,
         )
 
@@ -233,6 +244,12 @@ class PickPlaceNode(Node):
     # ------------------------------------------------------------------
 
     def _move_to(self, name: str):
+        if name not in self._positions:
+            available = [k for k in self._positions if isinstance(self._positions[k], dict)]
+            raise RuntimeError(
+                f'Position "{name}" not found in positions.toml — '
+                f'available: {available}'
+            )
         pos = self._positions[name]
         joints = pos['joints']
         duration_sec = float(pos['time_from_start'])
@@ -257,14 +274,51 @@ class PickPlaceNode(Node):
         self.get_logger().info(f'Moving to "{name}" — waiting {duration_sec:.1f}s')
         time.sleep(duration_sec)
 
+    def _set_gripper_speed(self, speed: float):
+        """Send gripper_speed (0.0–1.0) as a SetParameters call to the controller node.
+
+        Falls back silently if the driver does not expose this parameter —
+        speed is not part of control_msgs/action/GripperCommand itself.
+        Only warns once per node lifetime.
+        """
+        if not self._gripper_speed_client.service_is_ready():
+            if not self._gripper_speed_warned:
+                self.get_logger().warn(
+                    'Gripper SetParameters service not ready — gripper_speed not applied. '
+                    'To set manually: ros2 param set /robotiq_gripper_controller '
+                    'gripper_speed <0.0–1.0>'
+                )
+                self._gripper_speed_warned = True
+            return
+
+        param_value = ParameterValue()
+        param_value.type = ParameterType.PARAMETER_DOUBLE
+        param_value.double_value = float(speed)
+
+        param = Parameter()
+        param.name = 'gripper_speed'
+        param.value = param_value
+
+        req = SetParameters.Request()
+        req.parameters = [param]
+
+        done = threading.Event()
+        self._gripper_speed_client.call_async(req).add_done_callback(
+            lambda _f: done.set()
+        )
+        if not done.wait(timeout=2.0):
+            self.get_logger().warn('Gripper speed parameter call timed out')
+
     def _gripper(self, position: float):
         label = 'close' if position > 0.1 else 'open'
         if not self._gripper_client.wait_for_server(timeout_sec=5.0):
             raise RuntimeError('Gripper action server not available')
 
+        self._set_gripper_speed(self._gripper_speed)
+
         goal = GripperCommand.Goal()
         goal.command.position = position
-        goal.command.max_effort = 50.0
+        goal.command.max_effort = self._gripper_max_effort
 
         done = threading.Event()
 
