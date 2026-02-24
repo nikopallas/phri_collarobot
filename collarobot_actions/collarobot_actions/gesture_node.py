@@ -134,6 +134,7 @@ class GestureNode(Node):
                     raise RuntimeError(
                         f'return_position "{return_position}" not found in positions.toml'
                     )
+                time.sleep(1.0)  # settle after gesture before moving back
                 fb.state = 'RETURNING'
                 goal_handle.publish_feedback(fb)
                 self._move_to(return_position)
