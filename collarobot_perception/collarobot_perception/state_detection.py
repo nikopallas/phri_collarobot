@@ -1,6 +1,6 @@
 
-from take_image import capture_frame
-from detect_zones import get_state as analyze_zones_state
+from collarobot_perception.collarobot_perception.take_image import capture_frame
+from collarobot_perception.collarobot_perception.detect_zones import get_state as analyze_zones_state
 import cv2
 from pathlib import Path
 import rclpy
