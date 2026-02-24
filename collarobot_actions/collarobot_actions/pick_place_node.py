@@ -48,7 +48,7 @@ POSITIONS_PATH = (
 class PickPlaceNode(Node):
 
     def __init__(self):
-        super().__init__('pick_place_node', namespace='collarobot')
+        super().__init__('pick_place_node')
 
         with open(POSITIONS_PATH, 'rb') as f:
             self._positions = tomllib.load(f)
@@ -69,26 +69,26 @@ class PickPlaceNode(Node):
         cb = ReentrantCallbackGroup()
 
         self._traj_pub = self.create_publisher(
-            JointTrajectory, 'joint_trajectory_controller/joint_trajectory', 10
+            JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10
         )
 
         # Subscribe to carriage/lift feedback for pre-run position check.
         self._carriage_pos = None
         self._lift_pos = None
         self.create_subscription(
-            Float32, 'elmo/id1/carriage/position/get', self._on_carriage, 10
+            Float32, '/elmo/id1/carriage/position/get', self._on_carriage, 10
         )
         self.create_subscription(
-            Float32, 'elmo/id1/lift/position/get', self._on_lift, 10
+            Float32, '/elmo/id1/lift/position/get', self._on_lift, 10
         )
 
         self._gripper_client = ActionClient(
-            self, GripperCommand, 'robotiq_gripper_controller/gripper_cmd',
+            self, GripperCommand, '/robotiq_gripper_controller/gripper_cmd',
             callback_group=cb,
         )
         self._gripper_speed_client = self.create_client(
             SetParameters,
-            'robotiq_gripper_controller/set_parameters',
+            '/robotiq_gripper_controller/set_parameters',
             callback_group=cb,
         )
 

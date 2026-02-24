@@ -81,10 +81,10 @@ def _save_gestures(gestures: dict) -> None:
 class JointStateListener(Node):
 
     def __init__(self):
-        super().__init__('record_gesture', namespace='collarobot')
+        super().__init__('record_gesture')
         self._joints = None
         self._lock = threading.Lock()
-        self.create_subscription(JointState, 'joint_states', self._on_joints, 10)
+        self.create_subscription(JointState, '/joint_states', self._on_joints, 10)
 
     def _on_joints(self, msg: JointState):
         joint_map = dict(zip(msg.name, msg.position))

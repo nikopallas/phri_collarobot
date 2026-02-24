@@ -41,7 +41,7 @@ TIMEOUT_SEC = 30.0
 class GotoCarriageLiftNode(Node):
 
     def __init__(self, position_name: str, carriage_target, lift_target):
-        super().__init__('goto_carriage_lift', namespace='collarobot')
+        super().__init__('goto_carriage_lift')
         self._carriage_target = carriage_target
         self._lift_target = lift_target
         self._carriage_pos = None
@@ -50,17 +50,17 @@ class GotoCarriageLiftNode(Node):
 
         if carriage_target is not None:
             self._carriage_pub = self.create_publisher(
-                Float32, 'elmo/id1/carriage/position/set', 10
+                Float32, '/elmo/id1/carriage/position/set', 10
             )
             self.create_subscription(
-                Float32, 'elmo/id1/carriage/position/get', self._on_carriage, 10
+                Float32, '/elmo/id1/carriage/position/get', self._on_carriage, 10
             )
         if lift_target is not None:
             self._lift_pub = self.create_publisher(
-                Float32, 'elmo/id1/lift/position/set', 10
+                Float32, '/elmo/id1/lift/position/set', 10
             )
             self.create_subscription(
-                Float32, 'elmo/id1/lift/position/get', self._on_lift, 10
+                Float32, '/elmo/id1/lift/position/get', self._on_lift, 10
             )
 
         self._deadline = self.get_clock().now().nanoseconds / 1e9 + TIMEOUT_SEC

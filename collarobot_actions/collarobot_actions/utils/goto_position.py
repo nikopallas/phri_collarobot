@@ -30,7 +30,7 @@ POSITIONS_PATH = (
 class GotoPositionNode(Node):
 
     def __init__(self, position_name: str):
-        super().__init__('goto_position', namespace='collarobot')
+        super().__init__('goto_position')
 
         with open(POSITIONS_PATH, 'rb') as f:
             positions = tomllib.load(f)
@@ -48,7 +48,7 @@ class GotoPositionNode(Node):
 
         self._traj_pub = self.create_publisher(
             JointTrajectory,
-            'joint_trajectory_controller/joint_trajectory',
+            '/joint_trajectory_controller/joint_trajectory',
             10,
         )
 
