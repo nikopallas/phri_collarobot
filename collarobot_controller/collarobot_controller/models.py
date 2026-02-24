@@ -22,7 +22,23 @@ with open(RECIPES_PATH) as f:
     RECIPES = json.load(f)
 
 with open(INGREDIENTS_PATH) as f:
-    INGREDIENTS = json.load(f)
+    INGREDIENTS_DATA = json.load(f)
+
+# List of ingredient names for internal logic that iterates over all ingredients
+INGREDIENTS = list(INGREDIENTS_DATA.keys())
+
+
+def get_ingredient_id(name: str) -> int | None:
+    """Returns the ID for a given ingredient name."""
+    return INGREDIENTS_DATA.get(name)
+
+
+def get_ingredient_name(ing_id: int) -> str | None:
+    """Returns the name for a given ingredient ID."""
+    for name, iid in INGREDIENTS_DATA.items():
+        if iid == ing_id:
+            return name
+    return None
 
 
 # softmax over dict
@@ -289,3 +305,59 @@ def decide(
         decisions[ing] = decision
 
     return decisions
+
+
+def pick_action(
+        accepted: set,
+        proposed: set,
+        available: set,
+        rejected: set | None = None,
+        excluded: set | None = None,
+) -> Tuple[str, str] | Tuple[str, None]:
+    if accepted is None:
+        accepted = set()
+    if proposed is None:
+        proposed = set()
+    if rejected is None:
+        rejected = set()
+    if excluded is None:
+        excluded = set()
+
+
+
+    # 1a. AI Move: Try to move an ingredient from Proposed to Accepted/Rejected
+    if proposed:
+        decisions = decide(accepted, rejected, proposed, excluded)
+        print(f"AI Decisions: {decisions}")
+
+        moves = {ing: dec for ing, dec in decisions.items() if dec != "keep"}
+        if moves:
+            ing = list(moves.keys())[0]
+            dec = moves[ing]
+            if dec == "accept":
+                accepted.add(ing)
+                proposed.remove(ing)
+                print(f"AI PHASE: AI Accepted {ing}")
+                return "accepted", ing
+            elif dec == "reject":
+                proposed.remove(ing)
+                print(f"AI PHASE: AI Rejected {ing}")
+                return "rejected", ing
+
+    # 1b. AI Suggest: If no move, AI proposes a new ingredient
+    if True:  # Logical continuation if no move was returned
+        if available is None:
+            available = set(INGREDIENTS) - (accepted | rejected | proposed)
+        recipe, prob_rec, ingredient, prob_ing = predict(accepted, rejected, available, proposed, excluded)
+
+        if ingredient:
+            print(f"AI Suggestion: {ingredient} (Recipe: {recipe}, Prob: {prob_rec})")
+            proposed.add(ingredient)
+
+            print(f"AI PHASE: AI Proposed {ingredient}")
+            return "proposed", ingredient
+
+    return "skip", None
+
+
+
