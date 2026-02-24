@@ -12,6 +12,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name, [package_name + '/positions.toml']),
         ('share/' + package_name, [package_name + '/gestures.toml']),
+        ('share/' + package_name + '/launch', ['launch/collarobot_actions.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
