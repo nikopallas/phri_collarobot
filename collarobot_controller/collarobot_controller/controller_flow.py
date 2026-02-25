@@ -113,7 +113,7 @@ class VisionNodeSubscriber(Node):
 
 class MainStateMachineNode(Node):
     def __init__(self):
-        super().__init__('main_state_machine')
+        super().__init__('controller_node')
 
         self.current_state = States.IDLE
         self.next_state = States.IDLE
