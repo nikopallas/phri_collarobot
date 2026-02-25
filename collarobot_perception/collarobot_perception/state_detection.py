@@ -11,28 +11,35 @@ from collarobot_perception.detect_zones import get_state, MarkerDetectionError
 from collarobot_perception.take_image import capture_frame
 
 IMAGE_DIR = Path(__file__).parent.parent / "images"
-TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/captured_test_2.png").expanduser()
+TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/capture").expanduser()
 
 
 def capture_and_detect(debug=False, max_retries=12) -> dict:
     """Captures a frame and returns the current state with retry logic."""
+    last_frame = None
     for attempt in range(max_retries):
         try:
             frame = capture_frame()
-            frame = cv2.imread(str(TEST_IMAGE_PATH))
             if frame is None:
-                print(f"Attempt {attempt + 1}: Image capture failed.")
+                print(f"Attempt {attempt + 1}/{max_retries}: Image capture failed.")
                 continue
 
+            last_frame = frame
             return get_state(frame, debug=debug)
         except MarkerDetectionError as e:
-            print(f"Attempt {attempt + 1}: Marker detection failed: {e}. Retrying...")
+            print(f"Attempt {attempt + 1}/{max_retries}: {e}")
             if attempt < max_retries - 1:
                 time.sleep(0.1)
             continue
         except Exception as e:
-            print(f"Attempt {attempt + 1}: Unexpected error: {e}. Retrying...")
+            print(f"Attempt {attempt + 1}/{max_retries}: Unexpected error: {e}")
             continue
+
+    # Save the last frame for debugging
+    if last_frame is not None:
+        debug_path = str(IMAGE_DIR / "debug_failed_capture.png")
+        cv2.imwrite(debug_path, last_frame)
+        print(f"Saved last captured frame to {debug_path}")
 
     raise RuntimeError(f"Failed to detect zones after {max_retries} attempts.")
 
