@@ -11,7 +11,7 @@ from collarobot_perception.detect_zones import get_state, MarkerDetectionError
 from collarobot_perception.take_image import capture_frame
 
 IMAGE_DIR = Path(__file__).parent.parent / "images"
-TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/three_objects.png").expanduser()
+TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/captured_test_2.png").expanduser()
 
 
 def capture_and_detect(debug=False, max_retries=12) -> dict:
