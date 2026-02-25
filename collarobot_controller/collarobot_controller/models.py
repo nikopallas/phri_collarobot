@@ -1,12 +1,12 @@
 import json
 import math
 from pathlib import Path
-from scipy.special import softmax
 import numpy as np
 from typing import Tuple
 
 # Data paths, use the prepare_data.py script to generate them
-DATA_DIR = Path(__file__).parent.parent / "data"
+# DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path("~/collarobot_ws/src/collarobot_controller/data").expanduser()
 # DATA_DIR.mkdir(exist_ok=True)  # Avoid creating data dir if it doesn't exist where we expect it
 
 RECIPES_PATH = DATA_DIR / "recipes.json"
@@ -46,7 +46,8 @@ def _softmax_dict(scores: dict) -> dict:
     keys = list(scores.keys())
     values = np.array(list(scores.values()), dtype=float)
 
-    probs = softmax(values)
+    probs = np.exp(values - np.max(values))
+    probs /= probs.sum()
 
     return dict(zip(keys, probs))
 
