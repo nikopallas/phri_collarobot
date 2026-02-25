@@ -1,5 +1,5 @@
 import pytest
-from collarobot_controller.collarobot_controller.models import (
+from collarobot_controller.models import (
     RECIPES,
     INGREDIENTS,
     recipe_distribution,

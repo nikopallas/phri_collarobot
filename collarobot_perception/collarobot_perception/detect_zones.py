@@ -4,7 +4,7 @@ import numpy as np
 from pathlib import Path
 from typing import Tuple, List, Dict
 
-from transformation import (
+from collarobot_perception.transformation import (
     create_homography_from_corners, transform_points
 )
 
@@ -13,6 +13,15 @@ IMAGE_DIR = Path(__file__).parent.parent / "images"
 BASE_IMAGE_PATH = IMAGE_DIR / "base_template.jpeg"
 
 TEST_IMAGE_PATH = IMAGE_DIR / "real_img.png"
+
+
+class MarkerDetectionError(ValueError):
+    """Custom error for when required markers cannot be detected."""
+    pass
+
+
+# Global cache for the 6 layout markers (0-5)
+LAST_KNOWN_MARKER_COORDS = {i: None for i in range(6)}
 
 
 def detect_aruco_markers(gray_image, debug=False):
@@ -110,16 +119,26 @@ def marker_center(corner):
 def get_workspace_corners(marker_dict):
     """Extract the 4 workspace corners in TL, TR, BR, BL order."""
     required = [0, 1, 5, 2]
-    missing = [m for m in required if m not in marker_dict]
+
+    final_dict = {}
+    missing = []
+    for m in required:
+        if m in marker_dict:
+            final_dict[m] = marker_dict[m]
+        elif LAST_KNOWN_MARKER_COORDS[m] is not None:
+            final_dict[m] = LAST_KNOWN_MARKER_COORDS[m]
+        else:
+            missing.append(m)
+
     if missing:
-        raise ValueError(f"Missing layout markers: {missing}")
+        raise MarkerDetectionError(f"Missing layout markers: {missing}")
 
     # tl: Marker 0 top-left, tr: Marker 1 top-right, br: Marker 5 bottom-right, bl: Marker 2 bottom-left
     corners = np.array([
-        marker_dict[0][0][0],  # Top-Left of Marker 0
-        marker_dict[1][0][1],  # Top-Right of Marker 1
-        marker_dict[5][0][2],  # Bottom-Right of Marker 5
-        marker_dict[2][0][3]   # Bottom-Left of Marker 2
+        final_dict[0][0][0],  # Top-Left of Marker 0
+        final_dict[1][0][1],  # Top-Right of Marker 1
+        final_dict[5][0][2],  # Bottom-Right of Marker 5
+        final_dict[2][0][3]   # Bottom-Left of Marker 2
     ], dtype=np.float32)
     return corners
 
@@ -127,15 +146,25 @@ def get_workspace_corners(marker_dict):
 def compute_zones(marker_dict):
     """Compute three perspective-correct zone quadrilaterals."""
     required = [0, 1, 2, 3, 4, 5]
-    missing = [m for m in required if m not in marker_dict]
+
+    final_dict = {}
+    missing = []
+    for m in required:
+        if m in marker_dict:
+            final_dict[m] = marker_dict[m]
+        elif LAST_KNOWN_MARKER_COORDS[m] is not None:
+            final_dict[m] = LAST_KNOWN_MARKER_COORDS[m]
+        else:
+            missing.append(m)
+
     if missing:
-        raise ValueError(f"Missing layout markers: {missing}")
+        raise MarkerDetectionError(f"Missing layout markers: {missing}")
 
     # Layout centers for relative spacing calculation
-    c0 = np.array(marker_center(marker_dict[0]))
-    c3 = np.array(marker_center(marker_dict[3]))
-    c4 = np.array(marker_center(marker_dict[4]))
-    c1 = np.array(marker_center(marker_dict[1]))
+    c0 = np.array(marker_center(final_dict[0]))
+    c3 = np.array(marker_center(final_dict[3]))
+    c4 = np.array(marker_center(final_dict[4]))
+    c1 = np.array(marker_center(final_dict[1]))
 
     # Outer edges of the workspace
     corners = get_workspace_corners(marker_dict)
@@ -185,6 +214,12 @@ def assign_markers_to_zones(image, debug=False):
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     marker_dict, ids = detect_aruco_markers(gray, debug=debug)
+
+    # Update global cache for layout markers
+    for i in range(6):
+        if i in marker_dict:
+            LAST_KNOWN_MARKER_COORDS[i] = marker_dict[i]
+
     if not marker_dict:
         if debug:
             return {}, {}, image.copy()
@@ -230,14 +265,26 @@ def assign_markers_to_zones(image, debug=False):
         return result, marker_dict
 
 
-def get_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List, Dict]:
+def get_state(image, debug=False) -> dict:
+    """Analyzes an image and returns the current state of markers in zones."""
+    storage, proposed, accepted, relative_positions = analyze_zones_state(image, debug=debug)
+
+    return {
+        "storage": storage,
+        "proposed": proposed,
+        "accepted": accepted,
+        "relative_positions": relative_positions
+    }
+
+
+def analyze_zones_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List, Dict]:
     if debug:
         markers_in_zones, marker_dict, debug_img = assign_markers_to_zones(image, debug=True)
         print("Marker assignments:", markers_in_zones)
         cv2.imwrite("zones_debug_real.jpg", debug_img)
     else:
         markers_in_zones, marker_dict = assign_markers_to_zones(image, debug=False)
-    
+
     storage = []
     proposed = []
     accepted = []
@@ -249,7 +296,7 @@ def get_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List, Dict]:
             proposed.append(marker)
         elif zone == "Zone3":
             accepted.append(marker)
-            
+
     relative_positions = {}
     try:
         corner_pixels = get_workspace_corners(marker_dict)
@@ -268,15 +315,15 @@ def get_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List, Dict]:
     except (ValueError, KeyError) as e:
         if debug:
             print(f"Could not compute relative positions: {e}")
-            
+
     return storage, proposed, accepted, relative_positions
 
 
 # --- Example usage ---
 if __name__ == "__main__":
     img = cv2.imread(str(TEST_IMAGE_PATH))
-    storage, proposed, accepted, relative_positions = get_state(img)
-    print("Storage:", storage)
-    print("Proposed:", proposed)
-    print("Accepted:", accepted)
-    print("Relative Positions:", relative_positions)
+    state = get_state(img)
+    print("Storage:", state["storage"])
+    print("Proposed:", state["proposed"])
+    print("Accepted:", state["accepted"])
+    print("Relative Positions:", state["relative_positions"])

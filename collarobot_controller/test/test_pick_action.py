@@ -1,4 +1,4 @@
-from collarobot_controller.collarobot_controller.models import pick_action, INGREDIENTS
+from collarobot_controller.models import pick_action, INGREDIENTS
 
 
 def test_pick_action_suggestion():
