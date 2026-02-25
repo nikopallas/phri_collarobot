@@ -1,6 +1,7 @@
 
-from collarobot_perception.collarobot_perception.take_image import capture_frame
-from collarobot_perception.collarobot_perception.detect_zones import get_state as analyze_zones_state
+
+from collarobot_perception.detect_zones import get_state as analyze_zones_state
+
 import cv2
 from pathlib import Path
 import rclpy
@@ -48,33 +49,20 @@ if __name__ == '__main__':
 
 
 def get_state(debug=False) -> dict:
-    """
-    Captures a frame from the webcam and returns the current state of markers in zones.
-    Returns:
-        dict: Dictionary containing the state of markers in zones.
-    """
-    frame = capture_frame()
-    # if frame is None:
-    #     print("Error: Could not capture frame from webcam.")
-    #     return [], [], []
-
+    """Captures a frame and returns the current state of markers in zones."""
     frame = cv2.imread(str(TEST_IMAGE_PATH))
+    storage, proposed, accepted, relative_positions = analyze_zones_state(frame, debug=debug)
 
-    storage, proposed, accepted = analyze_zones_state(frame, debug=debug)
-
-    state = {
+    return {
         "storage": storage,
         "proposed": proposed,
-        "accepted": accepted
+        "accepted": accepted,
+        "relative_positions": relative_positions
     }
-
-    return state
 
 
 if __name__ == "__main__":
-    # Test the real-time detection
-    storage, proposed, accepted = get_state(debug=True)
+    state = get_state(debug=True)
     print("--- Real-time State ---")
-    print(f"Storage:  {storage}")
-    print(f"Proposed: {proposed}")
-    print(f"Accepted: {accepted}")
+    for k, v in state.items():
+        print(f"{k.capitalize()}: {v}")
