@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],  # Only setuptools is needed here
+    install_requires=['setuptools', 'numpy'],  # Only setuptools is needed here
     zip_safe=True,
     maintainer='phri3',
     maintainer_email='phri3',
@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'controller_node = collarobot_controller.controller_node:main',
+            'controller_node = collarobot_controller.controller_flow:main',
         ],
     },
 )

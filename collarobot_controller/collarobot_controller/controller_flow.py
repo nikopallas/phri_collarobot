@@ -121,18 +121,19 @@ class MainStateMachineNode(Node):
         self.wait_start_time = 0.0
         self.last_tick_time = 0.0
         self.vision_subscriber = VisionNodeSubscriber()
-        self.add_node_to_executor(self.vision_subscriber)
+        # self.action_client = ActionClient()
+        # self.add_node_to_executor(self.vision_subscriber)
 
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.get_logger().info("Node started with models.py integration.")
 
     def subscribe_from_vision(self) :
-        has_new_ingredient = self.vision_subscriber.check_and_reset_new_ingredient_flag()
+        has_new_ingredient = self.vision_subscriber.is_ingredient_status_changed()
         return has_new_ingredient
 
     def send_motion_robot_controller(self, motion_name):
         self.get_logger().info(f">>> SENDING MOTION: {motion_name}")
-
+        return # TEMP
         # 1. Check server availability
         if not self.action_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().error("Action server not available!")
