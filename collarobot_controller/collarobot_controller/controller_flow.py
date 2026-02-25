@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
 
 import time
 import sys
@@ -13,12 +14,7 @@ from typing import Dict, List, Optional
 
 
 # Import the model models to get the main_brain feedback
-try:
-    from .models import pick_action
-except ImportError:
-    # Fallback if not running as a package
-    import models
-
+import collarobot_controller.models as models
 
 class States(Enum):
     IDLE = 0
@@ -38,17 +34,23 @@ class VisionNodeSubscriber(Node):
         super().__init__('collarobot_vision_node_subscriber')
         self.received_msg = None
         self.subscription = self.create_subscription(
-            String, 'input_topic', self.listener_callback, 10)
+            String, '/collarobot/state', self.listener_callback, 10)
         self.latest_data = None
         self.previous_data = None  # Store previous state for comparison
+        self.new_ingredient_flag = False
 
     def listener_callback(self, msg):
         self.latest_data = msg.data
-        self.get_logger().info(f'got messag from Vision: {msg.data}')
+        self.get_logger().info(f'Got message from Vision: {msg.data}')
 
-        # Check if status changed when new data arrives
         if self.is_ingredient_status_changed():
             self.get_logger().info('New numbers added to proposed or accepted zones!')
+            self.new_ingredient_flag = True
+
+    def check_and_reset_new_ingredient_flag(self) -> bool:
+        flag = self.new_ingredient_flag
+        self.new_ingredient_flag = False
+        return flag
 
     def is_ingredient_status_changed(self):
         """
@@ -127,9 +129,8 @@ class MainStateMachineNode(Node):
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.get_logger().info("Node started with models.py integration.")
 
-    def subscribe_from_vision(self) :
-        has_new_ingredient = self.vision_subscriber.is_ingredient_status_changed()
-        return has_new_ingredient
+    def subscribe_from_vision(self):
+        return self.vision_subscriber.check_and_reset_new_ingredient_flag()
 
     def send_motion_robot_controller(self, motion_name):
         self.get_logger().info(f">>> SENDING MOTION: {motion_name}")
@@ -272,12 +273,16 @@ class MainStateMachineNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = MainStateMachineNode()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    executor.add_node(node.vision_subscriber)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
         node.destroy_node()
+        node.vision_subscriber.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
