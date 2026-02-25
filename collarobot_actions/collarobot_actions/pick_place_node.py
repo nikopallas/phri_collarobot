@@ -76,10 +76,10 @@ class PickPlaceNode(Node):
         self._carriage_pos = None
         self._lift_pos = None
         self.create_subscription(
-            Float32, '/elmo/id1/carriage/position/get', self._on_carriage, 10
+            Float32, '/elmo/id2/carriage/position/get', self._on_carriage, 10
         )
         self.create_subscription(
-            Float32, '/elmo/id1/lift/position/get', self._on_lift, 10
+            Float32, '/elmo/id2/lift/position/get', self._on_lift, 10
         )
 
         self._gripper_client = ActionClient(

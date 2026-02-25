@@ -35,7 +35,7 @@ ROS2 Jazzy workspace for a **Kinova Gen3 6-DOF arm** with **Robotiq gripper** an
          │    pick_place_node    │
          │   (action server)     │
          │                       │
-         │  pre-flight check     │◄── /elmo/id1/*/position/get
+         │  pre-flight check     │◄── /elmo/id2/*/position/get
          │  ─────────────────    │
          │  PRE_PICK             │──► /joint_trajectory_controller/...
          │  PICKING ─ close grip │──► /robotiq_gripper_controller/...
@@ -142,7 +142,7 @@ time_from_start = 2.5
 
 ### Carriage and lift in `[home]`
 
-If `carriage` and/or `lift` are recorded in the `[home]` entry, `pick_place_node` will **verify** the current position of each axis before starting the sequence. The tolerance is `±0.05` (same units as `/elmo/id1/*/position/get`). If either axis is out of tolerance the action is aborted with a clear error message telling the operator what to adjust.
+If `carriage` and/or `lift` are recorded in the `[home]` entry, `pick_place_node` will **verify** the current position of each axis before starting the sequence. The tolerance is `±0.05` (same units as `/elmo/id2/*/position/get`). If either axis is out of tolerance the action is aborted with a clear error message telling the operator what to adjust.
 
 ---
 
@@ -174,7 +174,7 @@ Move the carriage and lift to the required position manually or using `goto_carr
 ros2 run collarobot_actions goto_carriage_lift home
 ```
 
-The tool publishes the setpoint, then waits until `/elmo/id1/*/position/get` confirms arrival within tolerance. It exits once both axes are in position (or after a 30 s timeout).
+The tool publishes the setpoint, then waits until `/elmo/id2/*/position/get` confirms arrival within tolerance. It exits once both axes are in position (or after a 30 s timeout).
 
 ---
 
@@ -287,7 +287,7 @@ Any exception at any step immediately aborts the action with `success: False` an
 | Publisher     | `/joint_trajectory_controller/joint_trajectory` | `trajectory_msgs/JointTrajectory` | out                             |
 | Action client | `/robotiq_gripper_controller/gripper_cmd`       | `control_msgs/GripperCommand`     | out                             |
 | Subscriber    | `/joint_states`                                 | `sensor_msgs/JointState`          | in                              |
-| Subscriber    | `/elmo/id1/carriage/position/get`               | `std_msgs/Float32`                | in                              |
-| Subscriber    | `/elmo/id1/lift/position/get`                   | `std_msgs/Float32`                | in                              |
-| Publisher     | `/elmo/id1/carriage/position/set`               | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |
-| Publisher     | `/elmo/id1/lift/position/set`                   | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |
+| Subscriber    | `/elmo/id2/carriage/position/get`               | `std_msgs/Float32`                | in                              |
+| Subscriber    | `/elmo/id2/lift/position/get`                   | `std_msgs/Float32`                | in                              |
+| Publisher     | `/elmo/id2/carriage/position/set`               | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |
+| Publisher     | `/elmo/id2/lift/position/set`                   | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |
