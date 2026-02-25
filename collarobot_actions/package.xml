@@ -4,7 +4,7 @@
   <name>collarobot_actions</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="phri3">phri3</maintainer>
+  <maintainer email="phri3@todo.todo">phri3</maintainer>
   <license>TODO: License declaration</license>
 
   <depend>rclpy</depend>
