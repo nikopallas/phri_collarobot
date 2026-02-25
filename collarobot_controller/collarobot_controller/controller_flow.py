@@ -248,10 +248,21 @@ class MainStateMachineNode(Node):
 
             case States.HAND_CIRCLE:
                 self.send_motion_robot_controller("Hand Circle")
+
+                latest = self.vision_subscriber.latest_data
+                if latest:
+                    data = json.loads(latest)
+                    def ids_to_names(id_list):
+                        return {n for i in id_list if (n := models.get_ingredient_name(i)) is not None}
+                    accepted  = ids_to_names(data.get('accepted', []))
+                    proposed  = ids_to_names(data.get('proposed', []))
+                    available = ids_to_names(data.get('storage', []))
+                    recipe, _ = models.predict_recipe(accepted, self.rejected, available, proposed, self.excluded)
+                    self.get_logger().info(f"\n*** Finished recipe: {recipe} ***\nHappy cooking! :)")
+
                 self.wait_start_time = self.get_clock().now().seconds_nanoseconds()[0]
                 self.last_tick_time = self.wait_start_time
                 self.get_logger().info("\n--- 20 SECOND WAIT START ---")
-                #print("\n--- 20 SECOND WAIT START ---")
                 self.next_state = States.WAIT_AFTER_CIRCLE
 
             case States.WAIT_AFTER_CIRCLE:
