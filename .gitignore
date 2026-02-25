@@ -7,6 +7,10 @@ __pycache__
 collarobot_controller/collarobot_controller/complete_flow.py
 collarobot_perception/images/tags
 
+captured_image.png
+collarobot_perception/images/real_img.png
+zones_debug_real.jpg
+captured_test.png
 build/
 log/
 install/
