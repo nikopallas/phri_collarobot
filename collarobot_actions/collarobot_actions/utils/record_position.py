@@ -10,8 +10,8 @@ Examples:
 
 Subscribes to:
   /joint_states                     (required)
-  /elmo/id1/carriage/position/get   (optional — saved if available)
-  /elmo/id1/lift/position/get       (optional — saved if available)
+  /elmo/id2/carriage/position/get   (optional — saved if available)
+  /elmo/id2/lift/position/get       (optional — saved if available)
 """
 
 import argparse
@@ -75,10 +75,10 @@ class RecordPositionNode(Node):
 
         self.create_subscription(JointState, '/joint_states', self._on_joints, 10)
         self.create_subscription(
-            Float32, '/elmo/id1/carriage/position/get', self._on_carriage, 10
+            Float32, '/elmo/id2/carriage/position/get', self._on_carriage, 10
         )
         self.create_subscription(
-            Float32, '/elmo/id1/lift/position/get', self._on_lift, 10
+            Float32, '/elmo/id2/lift/position/get', self._on_lift, 10
         )
         self.get_logger().info(
             f'Waiting for /joint_states to record "{position_name}" '

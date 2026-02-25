@@ -12,13 +12,13 @@ The position must have 'carriage' and/or 'lift' fields in positions.toml
 (recorded automatically by record_position when the topics are available).
 
 Publishes to:
-  /elmo/id1/carriage/position/set  (std_msgs/Float32)
-  /elmo/id1/lift/position/set      (std_msgs/Float32)
+  /elmo/id2/carriage/position/set  (std_msgs/Float32)
+  /elmo/id2/lift/position/set      (std_msgs/Float32)
 
 Waits until current positions match targets within tolerance, then exits.
 Use stop topics for emergency:
-  ros2 topic pub --once /elmo/id1/carriage/stop std_msgs/msg/Empty '{}'
-  ros2 topic pub --once /elmo/id1/lift/stop     std_msgs/msg/Empty '{}'
+  ros2 topic pub --once /elmo/id2/carriage/stop std_msgs/msg/Empty '{}'
+  ros2 topic pub --once /elmo/id2/lift/stop     std_msgs/msg/Empty '{}'
 """
 
 import argparse
@@ -50,17 +50,17 @@ class GotoCarriageLiftNode(Node):
 
         if carriage_target is not None:
             self._carriage_pub = self.create_publisher(
-                Float32, '/elmo/id1/carriage/position/set', 10
+                Float32, '/elmo/id2/carriage/position/set', 10
             )
             self.create_subscription(
-                Float32, '/elmo/id1/carriage/position/get', self._on_carriage, 10
+                Float32, '/elmo/id2/carriage/position/get', self._on_carriage, 10
             )
         if lift_target is not None:
             self._lift_pub = self.create_publisher(
-                Float32, '/elmo/id1/lift/position/set', 10
+                Float32, '/elmo/id2/lift/position/set', 10
             )
             self.create_subscription(
-                Float32, '/elmo/id1/lift/position/get', self._on_lift, 10
+                Float32, '/elmo/id2/lift/position/get', self._on_lift, 10
             )
 
         self._deadline = self.get_clock().now().nanoseconds / 1e9 + TIMEOUT_SEC
