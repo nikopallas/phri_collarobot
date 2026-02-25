@@ -207,33 +207,44 @@ class MainStateMachineNode(Node):
                     self.next_state = States.MAIN_BRAIN
 
             case States.MAIN_BRAIN:
-                # --- INTEGRATION WITH models.py ---
-                # We call pick_action() and get the string
-                decision = models.pick_action()
-                self.get_logger().info(f"Model Decision: {decision}")
+                latest = self.vision_subscriber.latest_data
+                if latest:
+                    data = json.loads(latest)
+                    def ids_to_names(id_list):
+                        return {n for i in id_list if (n := models.get_ingredient_name(i)) is not None}
+                    available = ids_to_names(data.get('storage', []))
+                    proposed  = ids_to_names(data.get('proposed', []))
+                    accepted  = ids_to_names(data.get('accepted', []))
+                else:
+                    available = proposed = accepted = set()
 
-                if decision == "proposed":
+                action, ingredient = models.pick_action(
+                    accepted, proposed, available
+                )
+                self.get_logger().info(f"Model Decision: {action} -> {ingredient}")
+
+                if action == "proposed":
                     self.next_state = States.PROPOSE_NEW_INGREDIENT
-                elif decision == "rejected":
+                elif action == "rejected":
                     self.next_state = States.PUT_INGREDIENT_BACK
-                elif decision == "accepted":
+                elif action == "accepted":
                     self.next_state = States.ACCEPT_INGREDIENT
-                elif decision == "skip":
+                elif action == "skip":
                     self.next_state = States.HAND_CIRCLE
                 else:
-                    self.get_logger().warn(f"Unknown decision: {decision}. Staying in Brain.")
+                    self.get_logger().warn(f"Unknown decision: {action}. Staying in Brain.")
 
             case States.PROPOSE_NEW_INGREDIENT:
                 self.send_motion_robot_controller("Propose New")
-                self.next_state = States.MAIN_BRAIN
+                self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.PUT_INGREDIENT_BACK:
                 self.send_motion_robot_controller("Put Back")
-                self.next_state = States.MAIN_BRAIN
+                self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.ACCEPT_INGREDIENT:
                 self.send_motion_robot_controller("Accept")
-                self.next_state = States.MAIN_BRAIN
+                self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.HAND_CIRCLE:
                 self.send_motion_robot_controller("Hand Circle")
