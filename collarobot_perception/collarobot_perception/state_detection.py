@@ -52,7 +52,7 @@ class StatePublisher(Node):
             state = capture_and_detect()
             msg.data = json.dumps(state, indent=4)
             self.publisher_.publish(msg)
-            self.get_logger().info('Publishing state')
+            self.get_logger().info('Publishing: "%s"' % msg.data)
         except Exception as e:
             self.get_logger().error(f"Failed to get/publish state: {e}")
 
