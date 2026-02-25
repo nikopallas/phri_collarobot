@@ -12,7 +12,7 @@ from collarobot_perception.transformation import (
 IMAGE_DIR = Path(__file__).parent.parent / "images"
 BASE_IMAGE_PATH = IMAGE_DIR / "base_template.jpeg"
 
-TEST_IMAGE_PATH = IMAGE_DIR / "real_img.png"
+TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/three_objects.png").expanduser()
 
 
 class MarkerDetectionError(ValueError):
