@@ -37,9 +37,10 @@ def capture_and_detect(debug=False, max_retries=12) -> dict:
 
     # Save the last frame for debugging
     if last_frame is not None:
-        debug_path = str(IMAGE_DIR / "debug_failed_capture.png")
-        cv2.imwrite(debug_path, last_frame)
-        print(f"Saved last captured frame to {debug_path}")
+        print("Showing last captured frame (press any key to close)...")
+        cv2.imshow("Failed Capture Debug", last_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     raise RuntimeError(f"Failed to detect zones after {max_retries} attempts.")
 
