@@ -14,6 +14,12 @@ Slot naming convention: <zone><row>-<col>   e.g. storage1-1, proposal3-2, accept
   proposal : rows 1-4 robot | rows 5-6 human
   accepted : rows 1-4 robot | rows 5-6 human  (2 cols only)
 
+Vision lag handling:
+  After a robot move, the coordinator knows both the zone BEFORE and AFTER the move.
+  If vision still reports the before-zone → lag, ignore.
+  If vision reports the after-zone → caught up, confirm.
+  If vision reports something else → genuine human move, process it.
+
 Run:
   ros2 run collarobot_controller motion_coordinator_node
 """
@@ -23,7 +29,7 @@ import re
 import threading
 import tomllib
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, NamedTuple
 
 import rclpy
 from collarobot_msgs.action import MoveIngredient, PickPlace
@@ -38,7 +44,7 @@ POSITIONS_PATH = (
     / 'collarobot_actions' / 'positions.toml'
 )
 MAPPING_PATH = (
-    Path.home() / 'collarobot_ws' / 'src' / 'collarobot_controller' 
+    Path.home() / 'collarobot_ws' / 'src' / 'collarobot_controller'
     / 'data' / 'ingredients_mapping.toml'
 )
 ROBOT_MAX_ROW = 4   # robot owns rows 1-4 in proposal/accepted; human owns rows 5+
@@ -49,6 +55,13 @@ VISION_ZONE_MAP = {
     'proposed': 'proposal',
     'accepted': 'accepted',
 }
+
+
+class ExpectedMove(NamedTuple):
+    """Tracks what the coordinator expects vision to show after a robot move."""
+    before_zone: str   # zone the ingredient was in before the robot moved it
+    after_zone: str    # zone the ingredient should be in after the robot moved it
+    after_slot: str    # exact slot assigned after the move
 
 
 def _parse_slot(slot: str):
@@ -190,6 +203,12 @@ class MotionCoordinatorNode(Node):
         # Ingredient being moved by robot right now (suppresses vision reconciliation)
         self._robot_moving_ingredient: Optional[int] = None
 
+        # Expected moves: after a robot move completes, we know what zones vision
+        # should transition through.  This lets us distinguish "vision lag" from
+        # "genuine human move" without any timers.
+        # Key: ingredient_id, Value: ExpectedMove(before_zone, after_zone, after_slot)
+        self._expected_moves: Dict[int, ExpectedMove] = {}
+
         # ------------------------------------------------------------------
         # ROS interfaces
         # ------------------------------------------------------------------
@@ -265,6 +284,33 @@ class MotionCoordinatorNode(Node):
 
             if new_zone is None or new_zone == current_zone:
                 continue  # no change detected
+
+            # Check if this ingredient has a pending expected move
+            expected = self._expected_moves.get(ing_id)
+            if expected is not None:
+                if new_zone == expected.before_zone:
+                    # Vision still shows the old zone → lag, ignore
+                    self.get_logger().debug(
+                        f'Vision lag: ingredient {ing_id} still shows '
+                        f'{new_zone!r} (expected transition to {expected.after_zone!r})'
+                    )
+                    continue
+                if new_zone == expected.after_zone:
+                    # Vision caught up — confirm the robot's move
+                    self.get_logger().info(
+                        f'Vision confirmed: ingredient {ing_id} now in '
+                        f'{new_zone!r} (slot {expected.after_slot!r})'
+                    )
+                    del self._expected_moves[ing_id]
+                    continue
+                # Vision shows a THIRD zone — genuine human move after robot move
+                self.get_logger().info(
+                    f'Unexpected zone for ingredient {ing_id}: expected '
+                    f'{expected.after_zone!r}, vision shows {new_zone!r} — '
+                    f'treating as human move'
+                )
+                del self._expected_moves[ing_id]
+                # Fall through to human-move handling below
 
             # Human moved this ingredient
             self.get_logger().info(
@@ -354,8 +400,12 @@ class MotionCoordinatorNode(Node):
                 result.message = msg
                 return result
 
+        before_zone = _slot_zone(current_slot)
+        after_zone = _slot_zone(place_slot)
+
         self.get_logger().info(
-            f'  pick="{current_slot}"  place="{place_slot}"'
+            f'  pick="{current_slot}" ({before_zone})  '
+            f'place="{place_slot}" ({after_zone})'
         )
 
         # Suppress vision reconciliation for this ingredient during move
@@ -382,6 +432,17 @@ class MotionCoordinatorNode(Node):
             result.message = 'OK'
             result.pick_position = current_slot
             result.place_position = place_slot
+
+            # Register expected move so vision callback can distinguish
+            # "lag" (still shows before_zone) from "human move" (third zone)
+            self._expected_moves[ingredient_id] = ExpectedMove(
+                before_zone=before_zone,
+                after_zone=after_zone,
+                after_slot=place_slot,
+            )
+            self.get_logger().info(
+                f'  expecting vision: {before_zone!r} -> {after_zone!r}'
+            )
         else:
             self.get_logger().error(f'pick_place failed: {error_msg}')
             goal_handle.abort()

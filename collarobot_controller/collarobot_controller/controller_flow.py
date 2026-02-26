@@ -12,7 +12,7 @@ from std_msgs.msg import String
 from collarobot_msgs.action import MoveIngredient, Gesture
 from enum import Enum
 import json
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 
 # Import the model models to get the main_brain feedback
@@ -45,10 +45,13 @@ class VisionNodeSubscriber(Node):
         self.latest_data = None
         self.previous_data = None  # Store previous state for comparison
         self.new_ingredient_flag = False
+        # Ingredient IDs moved by the robot — ignore these in change detection
+        # so that vision reflecting the robot's own moves is never treated as
+        # a new human action, regardless of how late the update arrives.
+        self._robot_moved_ids: set = set()
 
     def listener_callback(self, msg):
         self.latest_data = msg.data
-        self.get_logger().info(f'Got message from Vision: {msg.data}')
 
         if self.is_ingredient_status_changed():
             self.get_logger().info('New numbers added to proposed or accepted zones!')
@@ -59,39 +62,64 @@ class VisionNodeSubscriber(Node):
         self.new_ingredient_flag = False
         return flag
 
+    def add_robot_moved_id(self, ingredient_id: int):
+        """Register an ingredient ID as robot-moved.
+
+        Vision updates showing this ID appearing in proposed/accepted will be
+        ignored until the next genuine human action clears it.
+        """
+        self._robot_moved_ids.add(ingredient_id)
+
     def is_ingredient_status_changed(self):
         """
-        Checks if new numbers have been added to 'proposed' or 'accepted' zones.
-        Returns True if new items are detected, False otherwise.
+        Checks if any ingredient changed zone (storage/proposed/accepted).
+        Detects additions, removals, and transfers between zones.
+        Ignores changes caused by the robot (tracked via _robot_moved_ids).
+        Returns True if a genuine human change is detected, False otherwise.
         """
         if not self.latest_data:
             return False
 
         try:
-            # Parse current data
             current_data = json.loads(self.latest_data)
 
-            # If this is the first message, store it and return False
             if self.previous_data is None:
                 self.previous_data = current_data
                 return False
 
-            # Check for new numbers in 'proposed' zone
-            proposed_changed = self._has_new_numbers(
-                self.previous_data.get('proposed', []),
-                current_data.get('proposed', [])
-            )
-
-            # Check for new numbers in 'accepted' zone
-            accepted_changed = self._has_new_numbers(
-                self.previous_data.get('accepted', []),
-                current_data.get('accepted', [])
-            )
+            # Build ingredient -> zone mappings for previous and current state
+            prev_zones = self._build_zone_map(self.previous_data)
+            curr_zones = self._build_zone_map(current_data)
 
             # Update previous data for next comparison
             self.previous_data = current_data
 
-            return proposed_changed or accepted_changed
+            # Find IDs whose zone changed
+            all_ids = set(prev_zones.keys()) | set(curr_zones.keys())
+            changed_ids = set()
+            for ing_id in all_ids:
+                if prev_zones.get(ing_id) != curr_zones.get(ing_id):
+                    changed_ids.add(ing_id)
+
+            # Filter out robot-moved IDs
+            if self._robot_moved_ids:
+                robot_ids = changed_ids & self._robot_moved_ids
+                if robot_ids:
+                    self.get_logger().info(
+                        f'Ignoring robot-moved IDs in vision: {robot_ids}'
+                    )
+                    self._robot_moved_ids -= robot_ids  # consumed
+                changed_ids -= robot_ids
+
+            if changed_ids:
+                details = {
+                    i: f'{prev_zones.get(i, "?")} -> {curr_zones.get(i, "?")}'
+                    for i in changed_ids
+                }
+                self.get_logger().info(f'Zone changes detected: {details}')
+                return True
+
+            return False
 
         except json.JSONDecodeError as e:
             self.get_logger().error(f'Failed to parse JSON: {e}')
@@ -100,23 +128,14 @@ class VisionNodeSubscriber(Node):
             self.get_logger().error(f'Error checking status change: {e}')
             return False
 
-    def _has_new_numbers(self, previous_list: List[int], current_list: List[int]) -> bool:
-        """
-        Helper method to check if new numbers have been added to a list.
-        Returns True if current list has numbers that weren't in previous list.
-        """
-        # Convert to sets for easier comparison
-        previous_set = set(previous_list)
-        current_set = set(current_list)
-
-        # Check if there are any numbers in current that weren't in previous
-        new_numbers = current_set - previous_set
-
-        if new_numbers:
-            self.get_logger().info(f'New numbers detected: {new_numbers}')
-            return True
-
-        return False
+    @staticmethod
+    def _build_zone_map(data: dict) -> Dict[int, str]:
+        """Build {ingredient_id: zone_name} from a vision state dict."""
+        zone_map = {}
+        for zone in ('storage', 'proposed', 'accepted'):
+            for ing_id in data.get(zone, []):
+                zone_map[int(ing_id)] = zone
+        return zone_map
 
 
 
@@ -146,6 +165,7 @@ class MainStateMachineNode(Node):
         self._gesture_busy = False
         self._pending_ingredient_id: Optional[int] = None
         self._pending_ingredient_name: Optional[str] = None
+        self._skip_after_action: bool = False
         self.rejected: set = set()   # ingredient names rejected this session
         self.excluded: set = set()   # recipe names to exclude from prediction
 
@@ -176,6 +196,8 @@ class MainStateMachineNode(Node):
     def _gesture_result_cb(self, future):
         result = future.result().result
         self._gesture_busy = False
+        # Clear any stale flag that accumulated during the gesture
+        self.vision_subscriber.check_and_reset_new_ingredient_flag()
         if result.success:
             self.get_logger().info('Gesture done')
         else:
@@ -187,6 +209,8 @@ class MainStateMachineNode(Node):
             self.get_logger().warn('send_motion_robot_controller: no ingredient ID set')
             return
         self.get_logger().info(f'>>> SENDING MOTION: ingredient {ingredient_id} -> {destination}')
+        # Tell vision to ignore this ingredient's zone change — it's the robot acting
+        self.vision_subscriber.add_robot_moved_id(ingredient_id)
         goal = MoveIngredient.Goal()
         goal.ingredient_id = ingredient_id
         goal.destination = destination
@@ -206,10 +230,17 @@ class MainStateMachineNode(Node):
     def _move_result_cb(self, future):
         result = future.result().result
         self._robot_busy = False
+        # Clear any stale flag that accumulated during the move
+        self.vision_subscriber.check_and_reset_new_ingredient_flag()
         if result.success:
             self.get_logger().info(
                 f'Move done: {result.pick_position} -> {result.place_position}'
             )
+            if self._skip_after_action:
+                self.get_logger().info('Lookahead triggered -> transitioning to HAND_CIRCLE')
+                self._skip_after_action = False
+                self.next_state = States.HAND_CIRCLE
+                self.current_state = States.HAND_CIRCLE
         else:
             self.get_logger().error(f'Move FAILED: {result.message}')
 
@@ -254,6 +285,31 @@ class MainStateMachineNode(Node):
                 self.get_logger().info(f"Model Decision: {action} -> {ingredient}")
                 self._pending_ingredient_name = ingredient
                 self._pending_ingredient_id = self._name_to_id.get(ingredient) if ingredient else None
+
+                # Lookahead: simulate the effect of this action and check
+                # whether the model would skip on the next turn.
+                self._skip_after_action = False
+                if action in ("accepted", "proposed", "rejected"):
+                    sim_accepted = set(accepted)
+                    sim_proposed = set(proposed)
+                    sim_available = set(available)
+                    if action == "accepted" and ingredient:
+                        sim_accepted.add(ingredient)
+                        sim_proposed.discard(ingredient)
+                    elif action == "proposed" and ingredient:
+                        sim_proposed.add(ingredient)
+                        sim_available.discard(ingredient)
+                    elif action == "rejected" and ingredient:
+                        sim_proposed.discard(ingredient)
+                    next_action, _ = models.pick_action(
+                        sim_accepted, sim_proposed, sim_available,
+                        rejected=self.rejected, excluded=self.excluded,
+                    )
+                    if next_action == "skip":
+                        self.get_logger().info(
+                            "Lookahead: model would skip next turn -> HAND_CIRCLE after this move"
+                        )
+                        self._skip_after_action = True
 
                 if action == "proposed":
                     self.next_state = States.PROPOSE_NEW_INGREDIENT
