@@ -1,53 +1,37 @@
-# CollaboRobot — Pick-and-Place System
+# CollaboRobot
 
-ROS2 Jazzy workspace for a **Kinova Gen3 6-DOF arm** with **Robotiq gripper** and **Elmo carriage/lift**.
-
----
-
-## Table of Contents
-
-1. [System Overview](#system-overview)
-2. [Package Structure](#package-structure)
-3. [Build](#build)
-4. [Configuration — positions.toml](#configuration--positionstoml)
-5. [Workflow](#workflow)
-   - [Step 1 — Calibrate the Gripper](#step-1--calibrate-the-gripper)
-   - [Step 2 — Set Up Carriage and Lift](#step-2--set-up-carriage-and-lift)
-   - [Step 3 — Record Positions](#step-3--record-positions)
-   - [Step 4 — Test Individual Moves](#step-4--test-individual-moves)
-   - [Step 5 — Run Pick-and-Place](#step-5--run-pick-and-place)
-6. [CLI Tools Reference](#cli-tools-reference)
-7. [Pick-and-Place Sequence](#pick-and-place-sequence)
-8. [ROS Topics and Actions](#ros-topics-and-actions)
+ROS2 Jazzy workspace for a collaborative pick-and-place system using a **Kinova Gen3 6-DOF arm**, **Robotiq gripper**, and **Elmo carriage/lift**. A camera-based perception layer detects ingredient positions on a shared table, a state machine decides which ingredient to propose or accept, and the robot executes pick-and-place and gesture motions autonomously.
 
 ---
 
-## System Overview
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Operator / Client                  │
-│   ros2 action send_goal  /pick_place_node/pick_place │
-└────────────────────┬────────────────────────────────┘
-                     │ PickPlace action (goal / feedback / result)
-                     ▼
-         ┌───────────────────────┐
-         │    pick_place_node    │
-         │   (action server)     │
-         │                       │
-         │  pre-flight check     │◄── /elmo/id2/*/position/get
-         │  ─────────────────    │
-         │  PRE_PICK             │──► /joint_trajectory_controller/...
-         │  PICKING ─ close grip │──► /robotiq_gripper_controller/...
-         │  POST_PICK            │
-         │  HOME                 │
-         │  PRE_PLACE            │
-         │  PLACING ─ open grip  │
-         │  POST_PLACE           │
-         └───────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  collarobot_perception                                               │
+│  state_publisher  ── ArUco detection ──► /collarobot/state (JSON)   │
+└─────────────────────────────┬────────────────────────────────────────┘
+                              │ std_msgs/String
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  collarobot_controller                                               │
+│                                                                      │
+│  controller_node ──────────────────────────────► gesture_node       │
+│    (state machine)  Gesture action                (collarobot_actions│
+│         │                                         /collarobot/gesture│
+│         │ MoveIngredient action                                      │
+│         ▼                                                            │
+│  motion_coordinator_node                                             │
+│    tracks exact slot per ingredient                                  │
+│    resolves (id, destination) → (pick_slot, place_slot)             │
+│         │                                                            │
+│         │ PickPlace action                                           │
+│         ▼                                                            │
+│  pick_place_node  ─────────► /joint_trajectory_controller/...       │
+│    (collarobot_actions)  ──► /robotiq_gripper_controller/...        │
+│    /collarobot/pick_place    ◄── /elmo/id2/*/position/get           │
+└──────────────────────────────────────────────────────────────────────┘
 ```
-
-The operator **manually positions the carriage and lift** before triggering the sequence. The node verifies they are in the correct position before executing any motion.
 
 ---
 
@@ -55,239 +39,227 @@ The operator **manually positions the carriage and lift** before triggering the 
 
 ```
 phri_collarobot/
-├── collarobot_msgs/               # Custom ROS2 interfaces
-│   └── action/
-│       └── PickPlace.action       # Action definition
 │
-└── collarobot_actions/            # All robot behaviour
-    └── collarobot_actions/
-        ├── positions.toml         # Named positions (edit / record here)
-        ├── pick_place_node.py     # Main action server
-        ├── record_position.py     # CLI: capture current robot state to TOML
-        ├── goto_position.py       # CLI: move arm to a named position
-        ├── goto_carriage_lift.py  # CLI: move carriage/lift to recorded values
-        └── test_gripper.py        # CLI: test gripper at a specific position value
+├── collarobot_msgs/                  # Custom ROS2 interfaces
+│   └── action/
+│       ├── PickPlace.action          # pick_place_node goal/result/feedback
+│       ├── Gesture.action            # gesture_node goal/result/feedback
+│       └── MoveIngredient.action     # motion_coordinator_node interface
+│
+├── collarobot_actions/               # Robot motion nodes + CLI tools
+│   ├── collarobot_actions/
+│   │   ├── pick_place_node.py        # Action server: /collarobot/pick_place
+│   │   ├── gesture_node.py           # Action server: /collarobot/gesture
+│   │   ├── positions.toml            # Named arm positions (edit source here)
+│   │   ├── gestures.toml             # Named gesture waypoints
+│   │   └── utils/
+│   │       ├── record_position.py    # CLI: capture robot state to TOML
+│   │       ├── record_gesture.py     # CLI: record gesture waypoints
+│   │       ├── goto_position.py      # CLI: move arm to a named position
+│   │       ├── goto_carriage_lift.py # CLI: move carriage/lift to stored values
+│   │       └── test_gripper.py       # CLI: test gripper at a specific value
+│   └── launch/
+│       └── collarobot_actions.launch.py  # Starts pick_place_node + gesture_node
+│
+├── collarobot_controller/            # State machine + motion coordinator
+│   ├── collarobot_controller/
+│   │   ├── controller_flow.py        # Main state machine (controller_node)
+│   │   ├── motion_coordinator_node.py # Slot tracking + MoveIngredient server
+│   │   ├── models.py                 # Decision logic (pick_action)
+│   │   └── flow.py                   # State definitions
+│   ├── data/
+│   │   ├── ingredients_mapping.toml  # ArUco ID → storage slot
+│   │   ├── ingredients.json          # Ingredient names
+│   │   └── recipes.json              # Recipe definitions
+│   └── OPERATOR_GUIDE.md             # Zone/slot layout reference
+│
+└── collarobot_perception/            # Vision / ArUco detection
+    └── collarobot_perception/
+        ├── state_detection.py        # state_publisher node → /collarobot/state
+        ├── transform_ArUco_tags.py   # ArUco pose estimation
+        ├── detect_zones.py           # Table zone detection
+        └── transformation.py         # Camera calibration helpers
 ```
 
 ---
 
 ## Build
 
-`collarobot_msgs` must be built **before** `collarobot_actions` because it generates the `PickPlace` action type.
+> **DDS requirement:** use CycloneDDS — FastDDS drops large messages silently.
+> ```bash
+> sudo apt install ros-jazzy-rmw-cyclonedds-cpp
+> echo 'export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp' >> ~/.bashrc && source ~/.bashrc
+> ```
+
+Build in dependency order:
 
 ```bash
 cd ~/collarobot_ws
 git pull
 
+# 1 — interfaces first (other packages depend on these action types)
 colcon build --packages-select collarobot_msgs --symlink-install
 source install/setup.bash
 
-colcon build --packages-select collarobot_actions --symlink-install
+# 2 — all remaining packages (can build in parallel)
+colcon build --packages-select collarobot_actions collarobot_controller collarobot_perception --symlink-install
 source install/setup.bash
 ```
 
-> `--symlink-install` symlinks Python source files so edits to `.py` files take effect immediately without rebuilding. TOML and data files are still copied on build — always edit the source file at `~/collarobot_ws/src/collarobot_actions/collarobot_actions/positions.toml`.
+> `--symlink-install` symlinks `.py` files so edits take effect immediately without rebuilding.
+> TOML and JSON data files are **copied** on build — always edit the source files in `~/collarobot_ws/src/`.
 
 ---
 
-## Configuration — positions.toml
+## Running the Full System
 
-All named positions are stored in a single TOML file:
-
+**Terminal 1** — robot motion nodes:
+```bash
+ros2 launch collarobot_actions collarobot_actions.launch.py
+# Starts: pick_place_node + gesture_node
 ```
-~/collarobot_ws/src/collarobot_actions/collarobot_actions/positions.toml
+
+**Terminal 2** — motion coordinator:
+```bash
+ros2 run collarobot_controller motion_coordinator_node
 ```
 
-### Schema
+**Terminal 3** — perception:
+```bash
+ros2 run collarobot_perception state_publisher
+```
+
+**Terminal 4** — main controller:
+```bash
+ros2 run collarobot_controller controller_node
+```
+
+---
+
+## Configuration
+
+### `positions.toml`
+Located at `~/collarobot_ws/src/collarobot_actions/collarobot_actions/positions.toml`
 
 ```toml
-# Gripper calibration (0.0 = fully open, 1.0 = fully closed)
-gripper_open  = 0.0
-gripper_close = 0.65          # set this after calibrating with test_gripper
+# Gripper calibration
+gripper_open  = 0.35
+gripper_close = 0.8
+
+# Top-level scalars — used by pick_place_node for carriage/lift pre-flight check
+carriage_position = 12.55
+lift_position     = 0.0
 
 [home]
-joints          = [0.0, -0.35, 0.0, -1.57, 0.0, 0.0]
-time_from_start = 5.0         # seconds the arm gets to reach this position
-carriage        = 1.2500      # optional — used for pre-flight check
-lift            = 0.3000      # optional — used for pre-flight check
+joints          = [j1, j2, j3, j4, j5, j6]   # radians
+time_from_start = 5.0                           # seconds to reach position
 
-[pre_pick]
+[storage1-1]
 joints          = [...]
 time_from_start = 4.0
-
-[pick]
-joints          = [...]
-time_from_start = 2.5
-
-[pre_place]
-joints          = [...]
-time_from_start = 4.0
-
-[place]
-joints          = [...]
-time_from_start = 2.5
 ```
 
-### Positions used in the sequence
+Named positions follow the slot naming convention: `<zone><row>-<col>`
+(e.g. `storage1-1`, `proposal2-3`, `accepted1-2`, `pre_storage1-1`).
 
-| Name        | Role                         | Notes                                                |
-| ----------- | ---------------------------- | ---------------------------------------------------- |
-| `pre_pick`  | Approach height above object | Also used as **retreat** after picking               |
-| `pick`      | At the object, gripper open  | Gripper closes here                                  |
-| `home`      | Safe neutral transit pose    | Arm passes through here between pick and place zones |
-| `pre_place` | Approach height above target | Also used as **retreat** after placing               |
-| `place`     | At the place target          | Gripper opens here                                   |
-
-> `post_pick` and `post_place` are not separate positions — the arm simply retraces back to `pre_pick` / `pre_place`.
-
-### Carriage and lift in `[home]`
-
-If `carriage` and/or `lift` are recorded in the `[home]` entry, `pick_place_node` will **verify** the current position of each axis before starting the sequence. The tolerance is `±0.05` (same units as `/elmo/id2/*/position/get`). If either axis is out of tolerance the action is aborted with a clear error message telling the operator what to adjust.
-
----
-
-## Workflow
-
-### Step 1 — Calibrate the Gripper
-
-Find the right closing value for your object using `test_gripper`:
-
+Record positions with:
 ```bash
-ros2 run collarobot_actions test_gripper 0.50
-ros2 run collarobot_actions test_gripper 0.60
+ros2 run collarobot_actions record_position <name> [--time SECS]
 ```
 
-The result shows `reached_goal`, final `position`, and `effort`. When it grips firmly without stalling, update `gripper_close` in `positions.toml`:
+### `gestures.toml`
+Located at `~/collarobot_ws/src/collarobot_actions/collarobot_actions/gestures.toml`
+
+Each gesture is a list of joint waypoints + cumulative timestamps. Available gestures: `wiggle`, `circle`.
+
+### `ingredients_mapping.toml`
+Located at `~/collarobot_ws/src/collarobot_controller/data/ingredients_mapping.toml`
 
 ```toml
-gripper_close = 0.62
+[storage_slots]
+6  = "storage1-1"   # beans
+7  = "storage1-2"   # beef
+# ...
 ```
+
+Maps ArUco marker ID → fixed storage slot. The corresponding slot must be recorded in `positions.toml`.
 
 ---
 
-### Step 2 — Set Up Carriage and Lift
+## Zone / Slot Layout
 
-Move the carriage and lift to the required position manually or using `goto_carriage_lift`:
+See [`collarobot_controller/OPERATOR_GUIDE.md`](collarobot_controller/OPERATOR_GUIDE.md) for the full zone reference.
 
-```bash
-# Command carriage+lift to the values stored for a named position
-ros2 run collarobot_actions goto_carriage_lift home
-```
+| Zone       | Robot (rows 1–4)           | Human (rows 5–6)           |
+|------------|----------------------------|----------------------------|
+| `storage`  | fixed per ingredient       | —                          |
+| `proposal` | robot places here          | human places here          |
+| `accepted` | robot places here          | human places here          |
 
-The tool publishes the setpoint, then waits until `/elmo/id2/*/position/get` confirms arrival within tolerance. It exits once both axes are in position (or after a 30 s timeout).
-
----
-
-### Step 3 — Record Positions
-
-Move the robot to each position (e.g. by jogging or gravity compensation mode), then capture the state:
-
-```bash
-ros2 run collarobot_actions record_position home      --time 5
-ros2 run collarobot_actions record_position pre_pick  --time 4
-ros2 run collarobot_actions record_position pick      --time 2.5
-ros2 run collarobot_actions record_position pre_place --time 4
-ros2 run collarobot_actions record_position place     --time 2.5
-```
-
-Each call:
-
-1. Reads the current `/joint_states`
-2. Waits 0.5 s for carriage/lift topics to deliver a value (saves them if available)
-3. Writes the entry to `positions.toml`, overwriting only that position
-
-The `--time` value is how many seconds the arm controller is allowed to reach that position during the sequence. Set it generously — it is better to wait a little longer than to send the next command while the arm is still moving.
-
----
-
-### Step 4 — Test Individual Moves
-
-Verify each recorded position looks correct before running the full sequence:
-
-```bash
-ros2 run collarobot_actions goto_position home
-ros2 run collarobot_actions goto_position pre_pick
-ros2 run collarobot_actions goto_position pick
-# etc.
-```
-
----
-
-### Step 5 — Run Pick-and-Place
-
-**Terminal 1** — start the action server:
-
-```bash
-ros2 run collarobot_actions pick_place_node
-```
-
-**Terminal 2** — trigger the sequence with live step feedback:
-
-```bash
-ros2 action send_goal --feedback /pick_place_node/pick_place \
-    collarobot_msgs/action/PickPlace '{}'
-```
-
-Feedback prints the current step name as the arm moves through the sequence. The result reports `success: True` on completion, or `success: False` with a reason on failure.
-
-To cancel mid-sequence press `Ctrl+C` in the terminal running `send_goal`.
-
----
-
-## CLI Tools Reference
-
-| Command                                | Description                                                         |
-| -------------------------------------- | ------------------------------------------------------------------- |
-| `record_position <name> [--time SECS]` | Capture current joints + carriage/lift to TOML                      |
-| `goto_position <name>`                 | Move arm to a named position (exits when done)                      |
-| `goto_carriage_lift <name>`            | Move carriage/lift to a named position's values (waits for arrival) |
-| `test_gripper <value> [--effort N]`    | Send a single gripper command and report the result                 |
+Slot format: `<zone><row>-<col>` — e.g. `proposal1-1`, `accepted5-2`
 
 ---
 
 ## Pick-and-Place Sequence
 
 ```
-IDLE
+goal received (ingredient_id, destination)
   │
-  ▼  [action goal received — carriage/lift pre-flight check passes]
-PRE_PICK      → arm moves to pre_pick
+  ▼  motion_coordinator_node resolves slots
+  ├─ pick_slot  = current ingredient position
+  └─ place_slot = next free slot in destination zone
   │
-  ▼
-PICKING       → arm moves to pick  →  gripper CLOSES
-  │
-  ▼
-POST_PICK     → arm retreats to pre_pick  (same position as PRE_PICK)
-  │
-  ▼
-HOME          → arm moves to home  (safe transit between zones)
-  │
-  ▼
-PRE_PLACE     → arm moves to pre_place
-  │
-  ▼
-PLACING       → arm moves to place  →  gripper OPENS
-  │
-  ▼
-POST_PLACE    → arm retreats to pre_place  (same position as PRE_PLACE)
-  │
-  ▼
-IDLE          [action result: success: True]
+  ▼  pick_place_node executes
+pre_pick → PICK (gripper close) → pre_pick → home
+→ pre_place → PLACE (gripper open) → pre_place → home
 ```
 
-Any exception at any step immediately aborts the action with `success: False` and a message describing what failed and where.
+`pre_<slot>` positions fall back to `home` if not recorded. The arm always returns to `home` after each pick-and-place so the next move starts from a known pose.
 
 ---
 
-## ROS Topics and Actions
+## CLI Tools Reference
 
-| Type          | Name                                            | Message                           | Direction                       |
-| ------------- | ----------------------------------------------- | --------------------------------- | ------------------------------- |
-| Action server | `/pick_place_node/pick_place`                   | `collarobot_msgs/PickPlace`       | in                              |
-| Publisher     | `/joint_trajectory_controller/joint_trajectory` | `trajectory_msgs/JointTrajectory` | out                             |
-| Action client | `/robotiq_gripper_controller/gripper_cmd`       | `control_msgs/GripperCommand`     | out                             |
-| Subscriber    | `/joint_states`                                 | `sensor_msgs/JointState`          | in                              |
-| Subscriber    | `/elmo/id2/carriage/position/get`               | `std_msgs/Float32`                | in                              |
-| Subscriber    | `/elmo/id2/lift/position/get`                   | `std_msgs/Float32`                | in                              |
-| Publisher     | `/elmo/id2/carriage/position/set`               | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |
-| Publisher     | `/elmo/id2/lift/position/set`                   | `std_msgs/Float32`                | out (`goto_carriage_lift` only) |
+| Command                                 | Description                                                        |
+|-----------------------------------------|--------------------------------------------------------------------|
+| `record_position <name> [--time SECS]`  | Capture current joints + carriage/lift to `positions.toml`        |
+| `record_gesture <name>`                 | Record gesture waypoints interactively                             |
+| `goto_position <name>`                  | Move arm to a named position (one-shot)                            |
+| `goto_carriage_lift <name>`             | Move carriage/lift to a named position's recorded values           |
+| `test_gripper <value> [--effort N]`     | Send a single gripper command and report the result                |
+
+---
+
+## ROS Interfaces
+
+| Type          | Name                                             | Message type                              |
+|---------------|--------------------------------------------------|-------------------------------------------|
+| Action server | `/collarobot/pick_place`                         | `collarobot_msgs/action/PickPlace`        |
+| Action server | `/collarobot/gesture`                            | `collarobot_msgs/action/Gesture`          |
+| Action server | `/collarobot/move_ingredient`                    | `collarobot_msgs/action/MoveIngredient`   |
+| Publisher     | `/joint_trajectory_controller/joint_trajectory`  | `trajectory_msgs/JointTrajectory`         |
+| Action client | `/robotiq_gripper_controller/gripper_cmd`        | `control_msgs/action/GripperCommand`      |
+| Subscriber    | `/joint_states`                                  | `sensor_msgs/JointState`                  |
+| Subscriber    | `/elmo/id2/carriage/position/get`                | `std_msgs/Float32`                        |
+| Subscriber    | `/elmo/id2/lift/position/get`                    | `std_msgs/Float32`                        |
+| Publisher     | `/elmo/id2/carriage/position/set`                | `std_msgs/Float32`                        |
+| Publisher     | `/elmo/id2/lift/position/set`                    | `std_msgs/Float32`                        |
+| Publisher     | `/collarobot/state`                              | `std_msgs/String` (JSON)                  |
+
+---
+
+## Manual Testing
+
+```bash
+# Move arm to a specific ingredient slot
+ros2 action send_goal /collarobot/move_ingredient \
+    collarobot_msgs/action/MoveIngredient '{ingredient_id: 6, destination: "proposal"}'
+
+# Trigger a gesture
+ros2 action send_goal --feedback /collarobot/gesture \
+    collarobot_msgs/action/Gesture '{gesture_name: "wiggle", return_position: "home"}'
+
+# Direct pick-and-place (bypasses coordinator)
+ros2 action send_goal --feedback /collarobot/pick_place \
+    collarobot_msgs/action/PickPlace '{pick_position: "storage1-1", place_position: "proposal1-1"}'
+```
