@@ -20,97 +20,94 @@ class MarkerDetectionError(ValueError):
     pass
 
 
-# Global cache for all marker positions (persists across frames)
-LAST_KNOWN_MARKER_COORDS = {i: None for i in range(25)}
+# Global cache for the 6 layout markers (0-5)
+LAST_KNOWN_MARKER_COORDS = {i: None for i in range(6)}
 
 
-def _make_corners(cx, cy, size=15):
-    """Create a fake marker corner array from a center point and half-size."""
-    s = size
-    return np.array([[[cx - s, cy - s], [cx + s, cy - s],
-                      [cx + s, cy + s], [cx - s, cy + s]]], dtype=np.float32)
-
-
-# Hardcoded layout marker positions (camera is fixed at 1920x1080)
-# Top edge left→right: 0 (TL), 3 (zone divider), 4 (zone divider), 1 (TR)
-# Bottom edge left→right: 2 (BL), 5 (BR)
-LAYOUT_POSITIONS = {
-    0: (820, 27),
-    3: (1050, 280),
-    4: (1330, 260),
-    1: (1500, 243),
-    2: (825, 730),
-    5: (1525, 710),
-}
-
-
-def detect_aruco_markers(image, debug=False):
-    """Detect ArUco markers: layout markers hardcoded, ingredients detected."""
+def detect_aruco_markers(gray_image, debug=False):
+    """Detect ArUco markers using an extremely robust multi-pass strategy."""
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     marker_dict = {}
-    MAX_VALID_ID = 24
-    SCALE = 4
+    all_rejected = []
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    # Define various parameter sets
+    param_sets = []
 
-    # --- Phase 1: Hardcoded layout markers (0-5) ---
-    for mid, (cx, cy) in LAYOUT_POSITIONS.items():
-        marker_dict[mid] = _make_corners(cx, cy)
-        if debug:
-            print(f"[Layout] ID {mid} at ({cx}, {cy})")
+    # Pass 1: Standard sensitive
+    p1 = aruco.DetectorParameters()
+    p1.adaptiveThreshWinSizeMin = 3
+    p1.adaptiveThreshWinSizeMax = 23
+    p1.adaptiveThreshWinSizeStep = 5
+    p1.minMarkerPerimeterRate = 0.005
+    param_sets.append(("Sensitive", p1))
 
-    # --- Phase 2: Detect ingredient markers (6-24) ---
-    # Crop to the board region defined by layout markers (with padding)
-    all_x = [p[0] for p in LAYOUT_POSITIONS.values()]
-    all_y = [p[1] for p in LAYOUT_POSITIONS.values()]
-    pad = 50
-    x1 = max(0, min(all_x) - pad)
-    y1 = max(0, min(all_y) - pad)
-    x2 = min(image.shape[1], max(all_x) + pad)
-    y2 = min(image.shape[0], max(all_y) + pad)
+    # Pass 2: Blur-tolerant
+    p2 = aruco.DetectorParameters()
+    p2.polygonalApproxAccuracyRate = 0.05
+    p2.errorCorrectionRate = 0.8
+    param_sets.append(("Blurry", p2))
 
-    board = image[y1:y2, x1:x2] if len(image.shape) == 3 else gray[y1:y2, x1:x2]
-    board_gray = gray[y1:y2, x1:x2]
+    # Pass 3: Low Contrast (Constant Thresh)
+    p3 = aruco.DetectorParameters()
+    p3.adaptiveThreshConstant = 7
+    param_sets.append(("LowContrast", p3))
 
-    p = aruco.DetectorParameters()
-    p.adaptiveThreshWinSizeMin = 3
-    p.adaptiveThreshWinSizeMax = 23
-    p.adaptiveThreshWinSizeStep = 3
-    p.minMarkerPerimeterRate = 0.003
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    detector = aruco.ArucoDetector(aruco_dict, p)
 
-    for name, base in [("color", board), ("clahe", clahe.apply(board_gray))]:
-        up = cv2.resize(base, None, fx=SCALE, fy=SCALE,
-                        interpolation=cv2.INTER_LINEAR)
-        corners, ids, _ = detector.detectMarkers(up)
-        if ids is not None:
-            for i, mid in enumerate(ids.flatten()):
-                mid = int(mid)
-                if mid <= MAX_VALID_ID and mid not in marker_dict:
-                    c = corners[i] / SCALE
-                    c[0][:, 0] += x1
-                    c[0][:, 1] += y1
-                    marker_dict[mid] = c
-                    if debug:
-                        print(f"[Detect-{name}] Found ID {mid}")
+    def run_detection(img_to_check, scale, context="Global"):
+        for p_name, p in param_sets:
+            detector = aruco.ArucoDetector(aruco_dict, p)
+            corners, ids, rejected = detector.detectMarkers(img_to_check)
+            if ids is not None:
+                for i, mid in enumerate(ids.flatten()):
+                    mid = int(mid)
+                    if mid not in marker_dict:
+                        marker_dict[mid] = corners[i] / scale
+                        if debug:
+                            print(f"[{context}] Found ID {mid} (Scale:{scale}, Params:{p_name})")
+            if rejected:
+                all_rejected.extend([r / scale for r in rejected])
 
-    # Update cache with freshly detected ingredient positions
-    for mid, corners in marker_dict.items():
-        if mid > 5:
-            LAST_KNOWN_MARKER_COORDS[mid] = corners
+    # 1. Global passes
+    for img_variant, name in [(gray_image, "raw"), (clahe.apply(gray_image), "clahe")]:
+        for scale in [1, 2, 4]:
+            if scale == 1:
+                test_img = img_variant
+            else:
+                test_img = cv2.resize(img_variant, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+            run_detection(test_img, scale, context=f"Global-{name}")
 
-    # Fill in missing ingredient markers from cache
-    for mid in range(6, 25):
-        if mid not in marker_dict and LAST_KNOWN_MARKER_COORDS[mid] is not None:
-            marker_dict[mid] = LAST_KNOWN_MARKER_COORDS[mid]
-            if debug:
-                print(f"[Cache] ID {mid} from previous frame")
+    # 2. Localized Refinement
+    layout_ids = [0, 1, 2, 3, 4, 5]
+    for cand in all_rejected:
+        if all(i in marker_dict for i in layout_ids) and len(marker_dict) > 6:
+            break
+        pts = cand[0].astype(np.float32)
+        x, y, w, h = cv2.boundingRect(pts)
+        if w < 5 or h < 5:
+            continue
 
-    if debug:
-        found = sorted(marker_dict.keys())
-        print(f"Detection complete: found={found}")
+        pad = int(max(w, h))
+        y1, y2 = max(0, y - pad), min(gray_image.shape[0], y + h + pad)
+        x1, x2 = max(0, x - pad), min(gray_image.shape[1], x + w + pad)
 
+        crop = gray_image[y1:y2, x1:x2]
+        crop_en = clahe.apply(crop)
+        for l_scale in [4, 8]:
+            up_crop = cv2.resize(crop_en, None, fx=l_scale, fy=l_scale, interpolation=cv2.INTER_LINEAR)
+            for p_name, lp in [("Sensitive", p1), ("LowContrast", p3)]:
+                l_detector = aruco.ArucoDetector(aruco_dict, lp)
+                l_corners, l_ids, _ = l_detector.detectMarkers(up_crop)
+                if l_ids is not None:
+                    for i, mid in enumerate(l_ids.flatten()):
+                        mid = int(mid)
+                        if mid not in marker_dict:
+                            c = l_corners[i] / l_scale
+                            c[0][:, 0] += x1
+                            c[0][:, 1] += y1
+                            marker_dict[mid] = c
+                            if debug:
+                                print(f"[Local-Refine] Found ID {mid} (L-Scale:{l_scale}, Pass:{p_name})")
     return marker_dict, list(marker_dict.keys())
 
 
@@ -121,21 +118,53 @@ def marker_center(corner):
 
 def get_workspace_corners(marker_dict):
     """Extract the 4 workspace corners in TL, TR, BR, BL order."""
+    required = [0, 1, 5, 2]
+
+    final_dict = {}
+    missing = []
+    for m in required:
+        if m in marker_dict:
+            final_dict[m] = marker_dict[m]
+        elif LAST_KNOWN_MARKER_COORDS[m] is not None:
+            final_dict[m] = LAST_KNOWN_MARKER_COORDS[m]
+        else:
+            missing.append(m)
+
+    if missing:
+        raise MarkerDetectionError(f"Missing layout markers: {missing}")
+
+    # tl: Marker 0 top-left, tr: Marker 1 top-right, br: Marker 5 bottom-right, bl: Marker 2 bottom-left
     corners = np.array([
-        marker_dict[0][0][0],  # Top-Left of Marker 0
-        marker_dict[1][0][1],  # Top-Right of Marker 1
-        marker_dict[5][0][2],  # Bottom-Right of Marker 5
-        marker_dict[2][0][3]   # Bottom-Left of Marker 2
+        final_dict[0][0][0],  # Top-Left of Marker 0
+        final_dict[1][0][1],  # Top-Right of Marker 1
+        final_dict[5][0][2],  # Bottom-Right of Marker 5
+        final_dict[2][0][3]   # Bottom-Left of Marker 2
     ], dtype=np.float32)
     return corners
 
 
 def compute_zones(marker_dict):
     """Compute three perspective-correct zone quadrilaterals."""
-    c0 = np.array(marker_center(marker_dict[0]))
-    c3 = np.array(marker_center(marker_dict[3]))
-    c4 = np.array(marker_center(marker_dict[4]))
-    c1 = np.array(marker_center(marker_dict[1]))
+    required = [0, 1, 2, 3, 4, 5]
+
+    final_dict = {}
+    missing = []
+    for m in required:
+        if m in marker_dict:
+            final_dict[m] = marker_dict[m]
+        elif LAST_KNOWN_MARKER_COORDS[m] is not None:
+            final_dict[m] = LAST_KNOWN_MARKER_COORDS[m]
+        else:
+            missing.append(m)
+
+    if missing:
+        raise MarkerDetectionError(f"Missing layout markers: {missing}")
+
+    # Layout centers for relative spacing calculation
+    c0 = np.array(marker_center(final_dict[0]))
+    c3 = np.array(marker_center(final_dict[3]))
+    c4 = np.array(marker_center(final_dict[4]))
+    c1 = np.array(marker_center(final_dict[1]))
 
     # Outer edges of the workspace
     corners = get_workspace_corners(marker_dict)
@@ -183,7 +212,13 @@ def assign_markers_to_zones(image, debug=False):
         marker_dict: all detected markers
         debug_image (if debug=True)
     """
-    marker_dict, ids = detect_aruco_markers(image, debug=debug)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    marker_dict, ids = detect_aruco_markers(gray, debug=debug)
+
+    # Update global cache for layout markers
+    for i in range(6):
+        if i in marker_dict:
+            LAST_KNOWN_MARKER_COORDS[i] = marker_dict[i]
 
     if not marker_dict:
         if debug:

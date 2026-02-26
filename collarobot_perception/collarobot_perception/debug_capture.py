@@ -12,7 +12,7 @@ from pathlib import Path
 from collarobot_perception.detect_zones import get_state, MarkerDetectionError
 
 IMAGE_DIR = Path(__file__).parent.parent / "images"
-SAVED_FRAME_PATH = IMAGE_DIR / "debug_last_capture.png"
+SAVED_FRAME_PATH = IMAGE_DIR / "three_objects.png"
 
 OFFLINE = "--offline" in sys.argv
 CAM_ID = 1
