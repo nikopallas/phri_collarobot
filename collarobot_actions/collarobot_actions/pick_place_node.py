@@ -189,15 +189,25 @@ class PickPlaceNode(Node):
         home = self._positions.get('home', {})
         issues = []
 
+        # Top-level fallback keys (e.g. carriage_position / lift_position)
+        toplevel_fallback = {
+            'carriage': 'carriage_position',
+            'lift':     'lift_position',
+        }
+
         for axis, stored_key, current in [
             ('carriage', 'carriage', self._carriage_pos),
             ('lift',     'lift',     self._lift_pos),
         ]:
             if ignore_carriage and axis == 'carriage':
                 continue
-            if stored_key not in home:
-                continue  # not recorded for this setup — skip
-            expected = float(home[stored_key])
+            # Look in [home] first, then fall back to top-level key
+            if stored_key in home:
+                expected = float(home[stored_key])
+            elif toplevel_fallback[axis] in self._positions:
+                expected = float(self._positions[toplevel_fallback[axis]])
+            else:
+                continue  # not recorded anywhere — skip
             if current is None:
                 self.get_logger().warn(
                     f'{axis} position unknown (no data on topic yet) — skipping check'
@@ -230,6 +240,7 @@ class PickPlaceNode(Node):
             (pre_place, None),
             (place_pos, 'open'),
             (pre_place, None),
+            ('home',    None),   # return to home so next gesture/move starts from a known position
         ]
 
     def _execute_step(self, pos_name: str, gripper_action):

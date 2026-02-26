@@ -126,6 +126,7 @@ class GestureNode(Node):
                 result.message = 'Cancelled'
                 return result
 
+            time.sleep(1.0)  # settle delay — let arm reach home before gesture starts
             self._execute_gesture(waypoints, times)
 
             # --- Feedback: RETURNING ---
