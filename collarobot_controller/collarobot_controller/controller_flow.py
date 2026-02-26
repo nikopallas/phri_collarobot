@@ -363,16 +363,18 @@ class MainStateMachineNode(Node):
             case States.WAIT_FOR_ROBOT:
                 if self._robot_busy:
                     return
-                # Move finished — check lookahead, then wait for human
-                if self._skip_after_move:
+                # Move finished — route based on success + lookahead
+                if self._move_ok and self._skip_after_move:
                     self._skip_after_move = False
                     self.get_logger().info(
                         'Lookahead triggered -> HAND_CIRCLE')
                     self._next = States.HAND_CIRCLE
                 elif self._move_ok:
+                    self._skip_after_move = False
                     self._send_gesture("wiggle")
                     self._next = States.WAIT_FOR_HUMAN
                 else:
+                    self._skip_after_move = False
                     self._next = States.WAIT_FOR_HUMAN
 
             case States.HAND_CIRCLE:
