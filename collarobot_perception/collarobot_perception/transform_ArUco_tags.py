@@ -10,9 +10,10 @@ from svglib.svglib import svg2rlg
 # Configuration
 # -----------------------------
 INPUT_FOLDER = "collarobot_perception/images/tags"
-OUTPUT = "aruco_5cm_with_names.pdf"
-TARGET_SIZE_MM = 50  # exact 5 cm
-MARKERS_PER_ROW = 3
+OUTPUT = "aruco_10cm_with_names.pdf"
+TARGET_SIZE_MM = 100  # exact 10 cm
+MARKERS_PER_ROW = 2
+MAX_MARKER_ID = 5  # only include markers 0-5
 
 
 # -----------------------------
@@ -28,7 +29,8 @@ def extract_id(filename):
 # Collect and sort SVG files
 # -----------------------------
 svg_files = sorted(
-    [f for f in os.listdir(INPUT_FOLDER) if f.lower().endswith(".svg")],
+    [f for f in os.listdir(INPUT_FOLDER)
+     if f.lower().endswith(".svg") and 0 <= extract_id(f) <= MAX_MARKER_ID],
     key=extract_id
 )
 
@@ -86,7 +88,7 @@ if row:
 # -----------------------------
 table = Table(
     data,
-    colWidths=[60 * mm] * MARKERS_PER_ROW
+    colWidths=[110 * mm] * MARKERS_PER_ROW
 )
 
 table.setStyle(TableStyle([

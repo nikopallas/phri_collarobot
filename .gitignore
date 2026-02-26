@@ -14,3 +14,12 @@ captured_test.png
 build/
 log/
 install/
+collarobot_perception/images/captured_test_800.png
+collarobot_perception/images/captured_test_small.png
+captured_test_2.png
+collarobot_perception/images/debug_crop_m0.png
+collarobot_perception/images/debug_crop_m4.png
+collarobot_perception/images/debug_m0_marker.png
+collarobot_perception/images/debug_m0_otsu.png
+collarobot_perception/images/debug_tl_300.png
+collarobot_perception/images/debug_tl_adaptive.png
