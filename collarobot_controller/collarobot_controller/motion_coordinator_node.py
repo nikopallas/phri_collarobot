@@ -358,9 +358,9 @@ class MotionCoordinatorNode(Node):
         if current_slot is None:
             msg = f'Unknown position for ingredient {ingredient_id}'
             self.get_logger().error(msg)
-            goal_handle.abort()
             result.success = False
             result.message = msg
+            goal_handle.abort()
             return result
 
         # Resolve destination slot
@@ -369,25 +369,25 @@ class MotionCoordinatorNode(Node):
             if place_slot is None:
                 msg = f'No storage slot mapping for ingredient {ingredient_id}'
                 self.get_logger().error(msg)
-                goal_handle.abort()
                 result.success = False
                 result.message = msg
+                goal_handle.abort()
                 return result
         elif destination in ('proposal', 'accepted'):
             place_slot = self._next_robot_slot(destination)
             if place_slot is None:
                 msg = f'No free robot slot in {destination} zone'
                 self.get_logger().error(msg)
-                goal_handle.abort()
                 result.success = False
                 result.message = msg
+                goal_handle.abort()
                 return result
         else:
             msg = f'Unknown destination: {destination!r}'
             self.get_logger().error(msg)
-            goal_handle.abort()
             result.success = False
             result.message = msg
+            goal_handle.abort()
             return result
 
         # Validate both positions exist in positions.toml
@@ -395,9 +395,9 @@ class MotionCoordinatorNode(Node):
             if pos not in self._positions:
                 msg = f'Position "{pos}" not found in positions.toml'
                 self.get_logger().error(msg)
-                goal_handle.abort()
                 result.success = False
                 result.message = msg
+                goal_handle.abort()
                 return result
 
         before_zone = _slot_zone(current_slot)
@@ -427,11 +427,6 @@ class MotionCoordinatorNode(Node):
             self.get_logger().info(
                 f'  ingredient {ingredient_id} moved to {place_slot}'
             )
-            goal_handle.succeed()
-            result.success = True
-            result.message = 'OK'
-            result.pick_position = current_slot
-            result.place_position = place_slot
 
             # Register expected move so vision callback can distinguish
             # "lag" (still shows before_zone) from "human move" (third zone)
@@ -443,11 +438,19 @@ class MotionCoordinatorNode(Node):
             self.get_logger().info(
                 f'  expecting vision: {before_zone!r} -> {after_zone!r}'
             )
+
+            # Set result fields BEFORE succeed() — succeed() triggers
+            # result delivery, so fields must already be populated.
+            result.success = True
+            result.message = 'OK'
+            result.pick_position = current_slot
+            result.place_position = place_slot
+            goal_handle.succeed()
         else:
             self.get_logger().error(f'pick_place failed: {error_msg}')
-            goal_handle.abort()
             result.success = False
             result.message = error_msg
+            goal_handle.abort()
 
         self._robot_moving_ingredient = None
         return result

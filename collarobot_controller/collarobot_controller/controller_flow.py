@@ -386,6 +386,17 @@ class MainStateMachineNode(Node):
                     self._next = States.WAIT_FOR_HUMAN
                 else:
                     self._skip_after_move = False
+                    # Exclude the ingredient so the model doesn't
+                    # retry the same failing move indefinitely.
+                    if self._pending_name:
+                        self.excluded.add(self._pending_name)
+                        self.get_logger().info(
+                            f'Excluded "{self._pending_name}" after failed move')
+                    # Discard any vision events that fired during the
+                    # failed move — they are unreliable (e.g. the
+                    # coordinator may have partially updated state, or
+                    # camera noise during arm movement).
+                    self.vision.consume_human_flag()
                     self._next = States.WAIT_FOR_HUMAN
 
             case States.HAND_CIRCLE:
