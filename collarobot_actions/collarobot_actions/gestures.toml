@@ -1,0 +1,47 @@
+# Gesture definitions for gesture_node.py
+#
+# Each gesture is a sequence of waypoints sent as a single multi-point
+# JointTrajectory (smooth interpolation by the controller).
+#
+# All joint angles in radians; times are cumulative seconds from start.
+#
+# IMPORTANT: Replace placeholder joint values for "present" and "invite"
+# with values recorded from the real robot using record_position.
+
+# Gesture: wiggle — joint_6 oscillates (dog tail wag)
+# Base pose = home joints; joint_6 varies by ±0.3 rad
+[wiggle]
+description = "Joint-6 wiggle (dog-wag)"
+waypoints = [
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.251807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.851807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.251807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.851807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+]
+times = [0.4, 0.8, 1.2, 1.6, 2.0]
+
+# Gesture: present — draws a rough horizontal circle in the air
+# TODO: Record actual waypoints from the robot
+[present]
+description = "Draw a circle in the air"
+waypoints = [
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+]
+times = [1.0, 2.0, 3.0, 4.0, 5.0]
+
+# Gesture: invite — reach forward, retract, repeat
+# TODO: Record actual waypoints from the robot
+[invite]
+description = "Inviting / beckoning gesture"
+waypoints = [
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+    [0.002231, -1.216090, -1.385489, -0.065738, -1.383703, -1.551807],
+]
+times = [1.5, 3.0, 4.5, 6.0]

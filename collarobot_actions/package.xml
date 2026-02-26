@@ -8,6 +8,13 @@
   <license>TODO: License declaration</license>
 
   <depend>rclpy</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>control_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>collarobot_msgs</depend>
+  <exec_depend>ros2launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

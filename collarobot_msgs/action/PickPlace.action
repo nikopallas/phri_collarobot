@@ -1,0 +1,11 @@
+# Goal
+bool ignore_carriage     # skip carriage axis in setup check
+string pick_position     # position name; empty → uses "pick"
+string place_position    # position name; empty → uses "place"
+---
+# Result
+bool success
+string message
+---
+# Feedback: name of the current step
+string state
