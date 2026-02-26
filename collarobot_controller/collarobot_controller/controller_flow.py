@@ -173,6 +173,7 @@ class MainStateMachineNode(Node):
         # Flags set by async callbacks, consumed by timer
         self._robot_busy = False
         self._gesture_busy = False
+        self._move_ok = False
 
         # Decision state
         self._pending_id: Optional[int] = None
@@ -193,6 +194,7 @@ class MainStateMachineNode(Node):
         self._pending_name = None
         self._robot_busy = False
         self._gesture_busy = False
+        self._move_ok = False
         self.vision.consume_human_flag()  # discard stale flag
 
     # --- Gesture (fire-and-forget) ----------------------------------
@@ -241,6 +243,7 @@ class MainStateMachineNode(Node):
         handle = future.result()
         if not handle.accepted:
             self.get_logger().error('Move REJECTED')
+            self._move_ok = False
             self._robot_busy = False
             return
         handle.get_result_async().add_done_callback(self._on_move_result)
@@ -248,6 +251,7 @@ class MainStateMachineNode(Node):
     def _on_move_result(self, future):
         """Only set flags — timer owns all state transitions."""
         result = future.result().result
+        self._move_ok = result.success
         if not result.success:
             self.get_logger().error(f'Move FAILED: {result.message}')
             # Clean up vision filter — ingredient was never moved
@@ -365,6 +369,9 @@ class MainStateMachineNode(Node):
                     self.get_logger().info(
                         'Lookahead triggered -> HAND_CIRCLE')
                     self._next = States.HAND_CIRCLE
+                elif self._move_ok:
+                    self._send_gesture("wiggle")
+                    self._next = States.WAIT_FOR_HUMAN
                 else:
                     self._next = States.WAIT_FOR_HUMAN
 
