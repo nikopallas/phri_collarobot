@@ -4,6 +4,7 @@ from rclpy.executors import MultiThreadedExecutor
 
 import sys
 import select
+import threading
 from pathlib import Path
 from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -41,22 +42,31 @@ class VisionNodeSubscriber(Node):
             String, '/collarobot/state', self._on_vision, 10)
         self.latest_data = None
         self._previous_data = None
-        self._human_acted = False
+        self._human_acted = threading.Event()
         self._robot_moved_ids: set = set()
+        self._robot_moved_lock = threading.Lock()
 
     def _on_vision(self, msg):
         self.latest_data = msg.data
         if self._detect_human_change():
             self.get_logger().info('Human changed the table')
-            self._human_acted = True
+            self._human_acted.set()
 
     def consume_human_flag(self) -> bool:
-        flag = self._human_acted
-        self._human_acted = False
-        return flag
+        """Thread-safe: return True if human acted, then reset."""
+        if self._human_acted.is_set():
+            self._human_acted.clear()
+            return True
+        return False
 
     def add_robot_moved_id(self, ingredient_id: int):
-        self._robot_moved_ids.add(ingredient_id)
+        with self._robot_moved_lock:
+            self._robot_moved_ids.add(ingredient_id)
+
+    def remove_robot_moved_id(self, ingredient_id: int):
+        """Remove an ID from the filter (e.g. after a failed move)."""
+        with self._robot_moved_lock:
+            self._robot_moved_ids.discard(ingredient_id)
 
     def _detect_human_change(self) -> bool:
         if not self.latest_data:
@@ -75,11 +85,13 @@ class VisionNodeSubscriber(Node):
                        if prev.get(i) != curr.get(i)}
 
             # Filter robot's own moves
-            robot = changed & self._robot_moved_ids
-            if robot:
-                self.get_logger().info(f'Ignoring robot-moved IDs: {robot}')
-                self._robot_moved_ids -= robot
-            changed -= robot
+            with self._robot_moved_lock:
+                robot = changed & self._robot_moved_ids
+                if robot:
+                    self.get_logger().info(
+                        f'Ignoring robot-moved IDs: {robot}')
+                    self._robot_moved_ids -= robot
+                changed -= robot
 
             if changed:
                 detail = {i: f'{prev.get(i,"?")} -> {curr.get(i,"?")}'
@@ -100,12 +112,16 @@ class VisionNodeSubscriber(Node):
         return zone_map
 
 
-def _read_vision(vision) -> tuple[set, set, set]:
+def _read_vision(vision, logger) -> tuple[set, set, set]:
     """Return (available, proposed, accepted) name sets from latest vision."""
     latest = vision.latest_data
     if not latest:
         return set(), set(), set()
-    data = json.loads(latest)
+    try:
+        data = json.loads(latest)
+    except (json.JSONDecodeError, Exception) as e:
+        logger.error(f'_read_vision JSON error: {e}')
+        return set(), set(), set()
     to_names = lambda ids: {
         n for i in ids if (n := models.get_ingredient_name(i)) is not None
     }
@@ -129,8 +145,7 @@ class MainStateMachineNode(Node):
               PROPOSE / ACCEPT / REJECT -> WAIT_FOR_ROBOT
                                               |
                     skip lookahead: -----------> HAND_CIRCLE
-                    on success: ---------------> WAIT_FOR_HUMAN
-                    on failure: ---------------> WAIT_FOR_HUMAN
+                    otherwise: ------------------> WAIT_FOR_HUMAN
     """
 
     def __init__(self):
@@ -158,7 +173,6 @@ class MainStateMachineNode(Node):
         # Flags set by async callbacks, consumed by timer
         self._robot_busy = False
         self._gesture_busy = False
-        self._move_ok: Optional[bool] = None  # True/False after move, None while busy
 
         # Decision state
         self._pending_id: Optional[int] = None
@@ -169,6 +183,17 @@ class MainStateMachineNode(Node):
 
         self.create_timer(0.1, self._tick)
         self.get_logger().info("Controller started.")
+
+    def _reset_cycle(self):
+        """Clear all transient state for a fresh cycle."""
+        self.rejected = set()
+        self.excluded = set()
+        self._skip_after_move = False
+        self._pending_id = None
+        self._pending_name = None
+        self._robot_busy = False
+        self._gesture_busy = False
+        self.vision.consume_human_flag()  # discard stale flag
 
     # --- Gesture (fire-and-forget) ----------------------------------
 
@@ -196,10 +221,11 @@ class MainStateMachineNode(Node):
 
     # --- Move ingredient (result read by timer) ---------------------
 
-    def _send_move(self, ingredient_id: Optional[int], destination: str):
+    def _send_move(self, ingredient_id: Optional[int], destination: str) -> bool:
+        """Send a move goal. Returns False if the move could not be sent."""
         if ingredient_id is None:
             self.get_logger().warn('_send_move: no ingredient ID')
-            return
+            return False
         self.get_logger().info(
             f'>>> MOVE: ingredient {ingredient_id} -> {destination}')
         self.vision.add_robot_moved_id(ingredient_id)
@@ -207,29 +233,30 @@ class MainStateMachineNode(Node):
         goal.ingredient_id = ingredient_id
         goal.destination = destination
         self._robot_busy = True
-        self._move_ok = None
         self._move_client.send_goal_async(goal).add_done_callback(
             self._on_move_accepted)
+        return True
 
     def _on_move_accepted(self, future):
         handle = future.result()
         if not handle.accepted:
             self.get_logger().error('Move REJECTED')
             self._robot_busy = False
-            self._move_ok = False
             return
         handle.get_result_async().add_done_callback(self._on_move_result)
 
     def _on_move_result(self, future):
         """Only set flags — timer owns all state transitions."""
         result = future.result().result
-        self._robot_busy = False
-        self._move_ok = result.success
-        if result.success:
+        if not result.success:
+            self.get_logger().error(f'Move FAILED: {result.message}')
+            # Clean up vision filter — ingredient was never moved
+            if self._pending_id is not None:
+                self.vision.remove_robot_moved_id(self._pending_id)
+        else:
             self.get_logger().info(
                 f'Move done: {result.pick_position} -> {result.place_position}')
-        else:
-            self.get_logger().error(f'Move FAILED: {result.message}')
+        self._robot_busy = False
 
     # --- Timer: single thread, owns all transitions -----------------
 
@@ -239,8 +266,7 @@ class MainStateMachineNode(Node):
             case States.IDLE:
                 if self._cycle_done:
                     self._cycle_done = False
-                    self.rejected = set()
-                    self.excluded = set()
+                    self._reset_cycle()
                     self._next = States.HAND_INVITATION
 
             case States.HAND_INVITATION:
@@ -254,11 +280,14 @@ class MainStateMachineNode(Node):
                     self._next = States.MAIN_BRAIN
 
             case States.MAIN_BRAIN:
-                available, proposed, accepted = _read_vision(self.vision)
+                available, proposed, accepted = _read_vision(
+                    self.vision, self.get_logger())
 
+                # Pass COPIES — pick_action mutates its arguments
                 action, ingredient = models.pick_action(
-                    accepted, proposed, available,
-                    rejected=self.rejected, excluded=self.excluded,
+                    set(accepted), set(proposed), set(available),
+                    rejected=set(self.rejected),
+                    excluded=set(self.excluded),
                 )
                 self.get_logger().info(f"Decision: {action} -> {ingredient}")
 
@@ -272,16 +301,23 @@ class MainStateMachineNode(Node):
                 # instead of waiting for the human.
                 self._skip_after_move = False
                 if action in ("accepted", "proposed", "rejected"):
-                    sim_a, sim_p, sim_av = set(accepted), set(proposed), set(available)
+                    sim_a = set(accepted)
+                    sim_p = set(proposed)
+                    sim_av = set(available)
+                    sim_rej = set(self.rejected)
                     if action == "accepted" and ingredient:
-                        sim_a.add(ingredient); sim_p.discard(ingredient)
+                        sim_a.add(ingredient)
+                        sim_p.discard(ingredient)
                     elif action == "proposed" and ingredient:
-                        sim_p.add(ingredient); sim_av.discard(ingredient)
+                        sim_p.add(ingredient)
+                        sim_av.discard(ingredient)
                     elif action == "rejected" and ingredient:
                         sim_p.discard(ingredient)
+                        sim_rej.add(ingredient)
                     next_action, _ = models.pick_action(
                         sim_a, sim_p, sim_av,
-                        rejected=self.rejected, excluded=self.excluded,
+                        rejected=sim_rej,
+                        excluded=set(self.excluded),
                     )
                     if next_action == "skip":
                         self.get_logger().info(
@@ -301,18 +337,24 @@ class MainStateMachineNode(Node):
                         self.get_logger().warn(f"Unknown action: {action}")
 
             case States.PROPOSE_NEW_INGREDIENT:
-                self._send_move(self._pending_id, 'proposal')
-                self._next = States.WAIT_FOR_ROBOT
+                if self._send_move(self._pending_id, 'proposal'):
+                    self._next = States.WAIT_FOR_ROBOT
+                else:
+                    self._next = States.WAIT_FOR_HUMAN
 
             case States.PUT_INGREDIENT_BACK:
                 if self._pending_name:
                     self.rejected.add(self._pending_name)
-                self._send_move(self._pending_id, 'storage')
-                self._next = States.WAIT_FOR_ROBOT
+                if self._send_move(self._pending_id, 'storage'):
+                    self._next = States.WAIT_FOR_ROBOT
+                else:
+                    self._next = States.WAIT_FOR_HUMAN
 
             case States.ACCEPT_INGREDIENT:
-                self._send_move(self._pending_id, 'accepted')
-                self._next = States.WAIT_FOR_ROBOT
+                if self._send_move(self._pending_id, 'accepted'):
+                    self._next = States.WAIT_FOR_ROBOT
+                else:
+                    self._next = States.WAIT_FOR_HUMAN
 
             case States.WAIT_FOR_ROBOT:
                 if self._robot_busy:
@@ -328,7 +370,8 @@ class MainStateMachineNode(Node):
 
             case States.HAND_CIRCLE:
                 self._send_gesture("circle")
-                available, proposed, accepted = _read_vision(self.vision)
+                available, proposed, accepted = _read_vision(
+                    self.vision, self.get_logger())
                 if accepted or proposed:
                     recipe, _ = models.predict_recipe(
                         accepted, self.rejected, available,
@@ -362,7 +405,7 @@ class MainStateMachineNode(Node):
 
             case States.END:
                 self.get_logger().warn("Shutdown.")
-                rclpy.shutdown()
+                raise SystemExit(0)
 
         if self._state != self._next:
             self.get_logger().info(
@@ -378,7 +421,7 @@ def main(args=None):
     executor.add_node(node.vision)
     try:
         executor.spin()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         pass
     finally:
         node.destroy_node()
