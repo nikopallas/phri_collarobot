@@ -1,147 +1,86 @@
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-from pathlib import Path
-from typing import Tuple, List, Dict
+from typing import Dict, List, Tuple
 
 from collarobot_perception.transformation import (
-    create_homography_from_corners, transform_points
+    create_homography_from_corners,
+    transform_points,
 )
 
-# Use your old image path
-IMAGE_DIR = Path(__file__).parent.parent / "images"
-BASE_IMAGE_PATH = IMAGE_DIR / "base_template.jpeg"
+IMAGE_PATH = "C:/Users/Ringer/PycharmProjects/phri_collarobot/collarobot_perception/images/optimal_image.jpeg"
+OUTPUT_PATH = "zones_debug_result.jpg"
 
-TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/three_objects.png").expanduser()
-
-
-class MarkerDetectionError(ValueError):
-    """Custom error for when required markers cannot be detected."""
-    pass
-
-
-# Global cache for the 6 layout markers (0-5)
+# Persistent cache so layout markers survive momentary detection failures
 LAST_KNOWN_MARKER_COORDS = {i: None for i in range(6)}
 
 
-def detect_aruco_markers(gray_image, debug=False):
-    """Detect ArUco markers using an extremely robust multi-pass strategy."""
-    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+class MarkerDetectionError(Exception):
+    """Raised when required layout markers cannot be found."""
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Low-level helpers
+# ---------------------------------------------------------------------------
+
+def center_of(corner):
+    """Centre of a single ArUco corner array (shape 1×4×2 or 4×2)."""
+    return np.mean(corner.reshape(4, 2), axis=0)
+
+
+def marker_center(corners):
+    """Return the (x, y) integer centre of a marker's corner array."""
+    c = center_of(corners)
+    return (int(c[0]), int(c[1]))
+
+
+def detect_aruco_markers(gray, debug=False):
+    """
+    Detect ArUco markers in a grayscale image.
+
+    Returns:
+        marker_dict: {id: corners_array}
+        ids: list of detected ids
+    """
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    parameters = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+    corners, ids, rejected = detector.detectMarkers(gray)
+
     marker_dict = {}
-    all_rejected = []
+    flat_ids = []
 
-    # Define various parameter sets
-    param_sets = []
+    if ids is not None:
+        for i, id_ in enumerate(ids.flatten()):
+            marker_dict[int(id_)] = corners[i]
+            flat_ids.append(int(id_))
 
-    # Pass 1: Standard sensitive
-    p1 = aruco.DetectorParameters()
-    p1.adaptiveThreshWinSizeMin = 3
-    p1.adaptiveThreshWinSizeMax = 23
-    p1.adaptiveThreshWinSizeStep = 5
-    p1.minMarkerPerimeterRate = 0.005
-    param_sets.append(("Sensitive", p1))
-
-    # Pass 2: Blur-tolerant
-    p2 = aruco.DetectorParameters()
-    p2.polygonalApproxAccuracyRate = 0.05
-    p2.errorCorrectionRate = 0.8
-    param_sets.append(("Blurry", p2))
-
-    # Pass 3: Low Contrast (Constant Thresh)
-    p3 = aruco.DetectorParameters()
-    p3.adaptiveThreshConstant = 7
-    param_sets.append(("LowContrast", p3))
-
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-
-    def run_detection(img_to_check, scale, context="Global"):
-        for p_name, p in param_sets:
-            detector = aruco.ArucoDetector(aruco_dict, p)
-            corners, ids, rejected = detector.detectMarkers(img_to_check)
-            if ids is not None:
-                for i, mid in enumerate(ids.flatten()):
-                    mid = int(mid)
-                    if mid not in marker_dict:
-                        marker_dict[mid] = corners[i] / scale
-                        if debug:
-                            print(f"[{context}] Found ID {mid} (Scale:{scale}, Params:{p_name})")
-            if rejected:
-                all_rejected.extend([r / scale for r in rejected])
-
-    # 1. Global passes
-    for img_variant, name in [(gray_image, "raw"), (clahe.apply(gray_image), "clahe")]:
-        for scale in [1, 2, 4]:
-            if scale == 1:
-                test_img = img_variant
-            else:
-                test_img = cv2.resize(img_variant, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-            run_detection(test_img, scale, context=f"Global-{name}")
-
-    # 2. Localized Refinement
-    layout_ids = [0, 1, 2, 3, 4, 5]
-    for cand in all_rejected:
-        if all(i in marker_dict for i in layout_ids) and len(marker_dict) > 6:
-            break
-        pts = cand[0].astype(np.float32)
-        x, y, w, h = cv2.boundingRect(pts)
-        if w < 5 or h < 5:
-            continue
-
-        pad = int(max(w, h))
-        y1, y2 = max(0, y - pad), min(gray_image.shape[0], y + h + pad)
-        x1, x2 = max(0, x - pad), min(gray_image.shape[1], x + w + pad)
-
-        crop = gray_image[y1:y2, x1:x2]
-        crop_en = clahe.apply(crop)
-        for l_scale in [4, 8]:
-            up_crop = cv2.resize(crop_en, None, fx=l_scale, fy=l_scale, interpolation=cv2.INTER_LINEAR)
-            for p_name, lp in [("Sensitive", p1), ("LowContrast", p3)]:
-                l_detector = aruco.ArucoDetector(aruco_dict, lp)
-                l_corners, l_ids, _ = l_detector.detectMarkers(up_crop)
-                if l_ids is not None:
-                    for i, mid in enumerate(l_ids.flatten()):
-                        mid = int(mid)
-                        if mid not in marker_dict:
-                            c = l_corners[i] / l_scale
-                            c[0][:, 0] += x1
-                            c[0][:, 1] += y1
-                            marker_dict[mid] = c
-                            if debug:
-                                print(f"[Local-Refine] Found ID {mid} (L-Scale:{l_scale}, Pass:{p_name})")
-    return marker_dict, list(marker_dict.keys())
-
-
-def marker_center(corner):
-    corner = corner[0]
-    return (int(corner[:, 0].mean()), int(corner[:, 1].mean()))
+    return marker_dict, flat_ids
 
 
 def get_workspace_corners(marker_dict):
-    """Extract the 4 workspace corners in TL, TR, BR, BL order."""
-    required = [0, 1, 5, 2]
+    """
+    Compute workspace corner points from layout markers 0, 1, 2, 5.
 
-    final_dict = {}
-    missing = []
+    Returns (top-left, top-right, bottom-right, bottom-left) as numpy arrays.
+    """
+    required = [0, 1, 2, 5]
     for m in required:
-        if m in marker_dict:
-            final_dict[m] = marker_dict[m]
-        elif LAST_KNOWN_MARKER_COORDS[m] is not None:
-            final_dict[m] = LAST_KNOWN_MARKER_COORDS[m]
-        else:
-            missing.append(m)
+        if m not in marker_dict:
+            raise ValueError(f"Workspace corner marker {m} not detected")
 
-    if missing:
-        raise MarkerDetectionError(f"Missing layout markers: {missing}")
+    tl = np.array(marker_center(marker_dict[0]), dtype=np.float64)
+    tr = np.array(marker_center(marker_dict[1]), dtype=np.float64)
+    bl = np.array(marker_center(marker_dict[2]), dtype=np.float64)
+    br = np.array(marker_center(marker_dict[5]), dtype=np.float64)
 
-    # tl: Marker 0 top-left, tr: Marker 1 top-right, br: Marker 5 bottom-right, bl: Marker 2 bottom-left
-    corners = np.array([
-        final_dict[0][0][0],  # Top-Left of Marker 0
-        final_dict[1][0][1],  # Top-Right of Marker 1
-        final_dict[5][0][2],  # Bottom-Right of Marker 5
-        final_dict[2][0][3]   # Bottom-Left of Marker 2
-    ], dtype=np.float32)
-    return corners
+    return tl, tr, br, bl
 
+
+# ---------------------------------------------------------------------------
+# Zone computation
+# ---------------------------------------------------------------------------
 
 def compute_zones(marker_dict):
     """Compute three perspective-correct zone quadrilaterals."""
@@ -167,7 +106,7 @@ def compute_zones(marker_dict):
     c1 = np.array(marker_center(final_dict[1]))
 
     # Outer edges of the workspace
-    corners = get_workspace_corners(marker_dict)
+    corners = get_workspace_corners(final_dict)
     w_tl, w_tr, w_br, w_bl = corners
 
     # Proportional positions of markers 3 & 4 along the top edge centers
@@ -195,24 +134,33 @@ def compute_zones(marker_dict):
     return zones
 
 
+# ---------------------------------------------------------------------------
+# Marker-to-zone assignment
+# ---------------------------------------------------------------------------
+
 def point_in_zone(pt, polygon):
     """Check if a point is inside a quadrilateral zone polygon."""
-    return cv2.pointPolygonTest(polygon.reshape(-1, 1, 2).astype(np.float32),
-                                (float(pt[0]), float(pt[1])), False) >= 0
+    return cv2.pointPolygonTest(
+        polygon.reshape(-1, 1, 2).astype(np.float32),
+        (float(pt[0]), float(pt[1])), False
+    ) >= 0
 
 
 def assign_markers_to_zones(image, debug=False):
     """
     Assign markers to zones.
+
     Args:
         image: BGR or grayscale image
         debug: if True, returns annotated image
+
     Returns:
-        result: dict {marker_id: zone_name} for markers > 4
+        result: dict {marker_id: zone_name} for markers > 5
         marker_dict: all detected markers
         debug_image (if debug=True)
     """
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    gray = (cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            if len(image.shape) == 3 else image)
     marker_dict, ids = detect_aruco_markers(gray, debug=debug)
 
     # Update global cache for layout markers
@@ -251,12 +199,14 @@ def assign_markers_to_zones(image, debug=False):
             result[int(id_)] = assigned_zone
             if debug:
                 cv2.circle(debug_image, center, 6, (0, 0, 255), -1)
-                cv2.putText(debug_image, str(id_), (center[0]+5, center[1]-5),
+                cv2.putText(debug_image, str(id_),
+                            (center[0] + 5, center[1] - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
         else:
             if debug:
                 cv2.circle(debug_image, center, 6, (255, 0, 0), -1)
-                cv2.putText(debug_image, str(id_), (center[0]+5, center[1]-5),
+                cv2.putText(debug_image, str(id_),
+                            (center[0] + 5, center[1] - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
     if debug:
@@ -265,25 +215,39 @@ def assign_markers_to_zones(image, debug=False):
         return result, marker_dict
 
 
+# ---------------------------------------------------------------------------
+# High-level state API
+# ---------------------------------------------------------------------------
+
 def get_state(image, debug=False) -> dict:
     """Analyzes an image and returns the current state of markers in zones."""
-    storage, proposed, accepted, relative_positions = analyze_zones_state(image, debug=debug)
-
+    storage, proposed, accepted, relative_positions = analyze_zones_state(
+        image, debug=debug
+    )
     return {
         "storage": storage,
         "proposed": proposed,
         "accepted": accepted,
-        "relative_positions": relative_positions
+        "relative_positions": relative_positions,
     }
 
 
-def analyze_zones_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List, Dict]:
+def analyze_zones_state(
+    image: cv2.Mat, debug=False
+) -> Tuple[List, List, List, Dict]:
+    """
+    Full pipeline: detect markers, assign to zones, compute relative positions.
+    """
     if debug:
-        markers_in_zones, marker_dict, debug_img = assign_markers_to_zones(image, debug=True)
+        markers_in_zones, marker_dict, debug_img = assign_markers_to_zones(
+            image, debug=True
+        )
         print("Marker assignments:", markers_in_zones)
         cv2.imwrite("zones_debug_real.jpg", debug_img)
     else:
-        markers_in_zones, marker_dict = assign_markers_to_zones(image, debug=False)
+        markers_in_zones, marker_dict = assign_markers_to_zones(
+            image, debug=False
+        )
 
     storage = []
     proposed = []
@@ -300,18 +264,29 @@ def analyze_zones_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List, 
     relative_positions = {}
     try:
         corner_pixels = get_workspace_corners(marker_dict)
-        H = create_homography_from_corners(corner_pixels)
+        H = create_homography_from_corners(
+            np.array(corner_pixels, dtype=np.float32)
+        )
 
         excluded_ids = [0, 1, 2, 3, 4, 5]
-        marker_ids_to_transform = [mid for mid in marker_dict.keys() if mid not in excluded_ids]
+        marker_ids_to_transform = [
+            mid for mid in marker_dict.keys() if mid not in excluded_ids
+        ]
 
         if marker_ids_to_transform:
-            points = np.array([marker_center(marker_dict[mid]) for mid in marker_ids_to_transform], dtype=np.float32)
+            points = np.array(
+                [marker_center(marker_dict[mid])
+                 for mid in marker_ids_to_transform],
+                dtype=np.float32,
+            )
             normalized_coords = transform_points(points, H)
 
             for i, mid in enumerate(marker_ids_to_transform):
                 x_norm, y_norm = normalized_coords[i]
-                relative_positions[int(mid)] = (round(float(x_norm), 3), round(float(y_norm), 3))
+                relative_positions[int(mid)] = (
+                    round(float(x_norm), 3),
+                    round(float(y_norm), 3),
+                )
     except (ValueError, KeyError) as e:
         if debug:
             print(f"Could not compute relative positions: {e}")
@@ -319,11 +294,104 @@ def analyze_zones_state(image: cv2.Mat, debug=False) -> Tuple[List, List, List, 
     return storage, proposed, accepted, relative_positions
 
 
-# --- Example usage ---
+# ---------------------------------------------------------------------------
+# Standalone visualisation (original main)
+# ---------------------------------------------------------------------------
+
+def main():
+    img = cv2.imread(IMAGE_PATH)
+    orig = img.copy()
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    parameters = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+
+    corners, ids, rejected = detector.detectMarkers(gray)
+
+    detected = {}
+
+    # Store detected markers
+    if ids is not None:
+        for i, id_ in enumerate(ids.flatten()):
+            detected[id_] = center_of(corners[i])
+            cv2.circle(img, tuple(detected[id_].astype(int)), 8,
+                       (0, 255, 0), -1)
+            cv2.putText(img, f"ID {id_}",
+                        tuple(detected[id_].astype(int)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    height, width = img.shape[:2]
+
+    # Assign marker 4 if missing
+    if 4 not in detected:
+        print("Inferring marker 4 from rejected candidates")
+
+        best_candidate = None
+        best_score = 0
+
+        x_min = detected[3][0] + 30 if 3 in detected else width * 0.4
+        x_max = detected[1][0] - 30 if 1 in detected else width * 0.85
+
+        for r in rejected:
+            c = center_of(r)
+            if x_min < c[0] < x_max and c[1] < height * 0.35:
+                score = c[0]
+                if score > best_score:
+                    best_score = score
+                    best_candidate = c
+
+        if best_candidate is not None:
+            detected[4] = best_candidate
+            cv2.circle(img, tuple(best_candidate.astype(int)), 10,
+                       (255, 0, 0), -1)
+            cv2.putText(img, "ID 4 (inferred)",
+                        tuple(best_candidate.astype(int)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+
+    # Infer marker 0 from geometry
+    if 0 not in detected and 2 in detected and 3 in detected:
+        print("Inferring marker 0 geometrically")
+        y = detected[3][1]
+        x = detected[2][0]
+        detected[0] = np.array([x, y])
+        cv2.circle(img, (int(x), int(y)), 10, (0, 0, 255), -1)
+        cv2.putText(img, "ID 0 (inferred)",
+                    (int(x), int(y)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+    # Draw vertical split lines
+    if 3 in detected:
+        x3 = int(detected[3][0])
+        cv2.line(img, (x3, 0), (x3, height), (0, 255, 255), 3)
+
+    if 4 in detected:
+        x4 = int(detected[4][0])
+        cv2.line(img, (x4, 0), (x4, height), (0, 255, 255), 3)
+
+    # Draw upper line (marker 0 -> marker 1)
+    if 0 in detected and 1 in detected:
+        p0 = tuple(detected[0].astype(int))
+        p1 = tuple(detected[1].astype(int))
+        cv2.line(img, p0, p1, (0, 200, 255), 3)
+
+    # Draw lower line (marker 2 -> marker 5)
+    if 2 in detected and 5 in detected:
+        p2 = tuple(detected[2].astype(int))
+        p5 = tuple(detected[5].astype(int))
+        cv2.line(img, p2, p5, (0, 200, 255), 3)
+
+    # Draw workspace rectangle
+    if all(k in detected for k in [0, 1, 2, 5]):
+        pts = np.array([
+            detected[0], detected[1],
+            detected[5], detected[2]
+        ], dtype=int)
+        cv2.polylines(img, [pts], True, (255, 255, 0), 4)
+
+    cv2.imwrite(OUTPUT_PATH, img)
+    print("Saved to:", OUTPUT_PATH)
+
+
 if __name__ == "__main__":
-    img = cv2.imread(str(TEST_IMAGE_PATH))
-    state = get_state(img)
-    print("Storage:", state["storage"])
-    print("Proposed:", state["proposed"])
-    print("Accepted:", state["accepted"])
-    print("Relative Positions:", state["relative_positions"])
+    main()
