@@ -2,13 +2,13 @@ gripper_open = 0.35
 gripper_close = 0.55
 gripper_speed = 1.0
 gripper_max_effort = 50.0
-lift_position = 0.2590450942516327
+lift_position = 0.48
 carriage_position = 12.550000190734863
 
 [home]
 joints = [-0.344518, 1.396093, 1.669235, 3.110204, -1.427716, -1.557667]
 time_from_start = 6.0
-lift = 0.2590450942516327
+lift = 0.48
 carriage = 12.550000190734863
 
 [pre_storage1-1]
