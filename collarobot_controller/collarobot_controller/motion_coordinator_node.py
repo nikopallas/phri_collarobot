@@ -132,6 +132,30 @@ class MotionCoordinatorNode(Node):
         self._human_accepted = _build_ordered_slots(base_positions, 'accepted',
                                                      min_row=ROBOT_MAX_ROW + 1)
 
+        # If no human slots exist yet in positions.toml, pre-generate the expected
+        # names (rows 5-6) so tracking works immediately.  The robot can only pick
+        # from these once they are physically recorded with record_position.
+        if not self._human_proposal:
+            self._human_proposal = [
+                f'proposal{r}-{c}'
+                for r in range(ROBOT_MAX_ROW + 1, ROBOT_MAX_ROW + 3)
+                for c in range(1, 4)
+            ]
+            self.get_logger().warn(
+                f'No human proposal slots found in positions.toml — using virtual names '
+                f'{self._human_proposal}. Record them to allow robot picks from human zone.'
+            )
+        if not self._human_accepted:
+            self._human_accepted = [
+                f'accepted{r}-{c}'
+                for r in range(ROBOT_MAX_ROW + 1, ROBOT_MAX_ROW + 3)
+                for c in range(1, 3)
+            ]
+            self.get_logger().warn(
+                f'No human accepted slots found in positions.toml — using virtual names '
+                f'{self._human_accepted}. Record them to allow robot picks from human zone.'
+            )
+
         self.get_logger().info(
             f'Robot proposal slots ({len(self._robot_proposal)}): {self._robot_proposal}'
         )
