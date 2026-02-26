@@ -128,8 +128,9 @@ class MainStateMachineNode(Node):
                     v
               PROPOSE / ACCEPT / REJECT -> WAIT_FOR_ROBOT
                                               |
-                    on success: ----------------> MAIN_BRAIN  (re-evaluate)
-                    on failure: ----------------> WAIT_FOR_HUMAN
+                    skip lookahead: -----------> HAND_CIRCLE
+                    on success: ---------------> WAIT_FOR_HUMAN
+                    on failure: ---------------> WAIT_FOR_HUMAN
     """
 
     def __init__(self):
@@ -162,6 +163,7 @@ class MainStateMachineNode(Node):
         # Decision state
         self._pending_id: Optional[int] = None
         self._pending_name: Optional[str] = None
+        self._skip_after_move: bool = False
         self.rejected: set = set()
         self.excluded: set = set()
 
@@ -265,6 +267,27 @@ class MainStateMachineNode(Node):
                     self._name_to_id.get(ingredient) if ingredient else None
                 )
 
+                # Lookahead: if the model would say "skip" after this
+                # action, go straight to HAND_CIRCLE when the move finishes
+                # instead of waiting for the human.
+                self._skip_after_move = False
+                if action in ("accepted", "proposed", "rejected"):
+                    sim_a, sim_p, sim_av = set(accepted), set(proposed), set(available)
+                    if action == "accepted" and ingredient:
+                        sim_a.add(ingredient); sim_p.discard(ingredient)
+                    elif action == "proposed" and ingredient:
+                        sim_p.add(ingredient); sim_av.discard(ingredient)
+                    elif action == "rejected" and ingredient:
+                        sim_p.discard(ingredient)
+                    next_action, _ = models.pick_action(
+                        sim_a, sim_p, sim_av,
+                        rejected=self.rejected, excluded=self.excluded,
+                    )
+                    if next_action == "skip":
+                        self.get_logger().info(
+                            "Lookahead: will skip to HAND_CIRCLE after move")
+                        self._skip_after_move = True
+
                 match action:
                     case "proposed":
                         self._next = States.PROPOSE_NEW_INGREDIENT
@@ -294,9 +317,12 @@ class MainStateMachineNode(Node):
             case States.WAIT_FOR_ROBOT:
                 if self._robot_busy:
                     return
-                # Move finished — re-evaluate on success, wait for human on failure
-                if self._move_ok:
-                    self._next = States.MAIN_BRAIN
+                # Move finished — check lookahead, then wait for human
+                if self._skip_after_move:
+                    self._skip_after_move = False
+                    self.get_logger().info(
+                        'Lookahead triggered -> HAND_CIRCLE')
+                    self._next = States.HAND_CIRCLE
                 else:
                     self._next = States.WAIT_FOR_HUMAN
 
