@@ -42,7 +42,8 @@ class VisionNodeSubscriber(Node):
             String, '/collarobot/state', self._on_vision, 10)
         self.latest_data = None
         self._previous_data = None
-        self._human_acted = threading.Event()
+        self._human_flag = False
+        self._human_flag_lock = threading.Lock()
         self._robot_moved_ids: set = set()
         self._robot_moved_lock = threading.Lock()
 
@@ -50,14 +51,23 @@ class VisionNodeSubscriber(Node):
         self.latest_data = msg.data
         if self._detect_human_change():
             self.get_logger().info('Human changed the table')
-            self._human_acted.set()
+            with self._human_flag_lock:
+                self._human_flag = True
 
     def consume_human_flag(self) -> bool:
         """Thread-safe: return True if human acted, then reset."""
-        if self._human_acted.is_set():
-            self._human_acted.clear()
-            return True
-        return False
+        with self._human_flag_lock:
+            fired = self._human_flag
+            self._human_flag = False
+            return fired
+
+    def reset(self):
+        """Clear all state for a new cycle."""
+        with self._human_flag_lock:
+            self._human_flag = False
+        self._previous_data = None
+        with self._robot_moved_lock:
+            self._robot_moved_ids.clear()
 
     def add_robot_moved_id(self, ingredient_id: int):
         with self._robot_moved_lock:
@@ -195,7 +205,7 @@ class MainStateMachineNode(Node):
         self._robot_busy = False
         self._gesture_busy = False
         self._move_ok = False
-        self.vision.consume_human_flag()  # discard stale flag
+        self.vision.reset()  # clear flag + re-baseline vision
 
     # --- Gesture (fire-and-forget) ----------------------------------
 
@@ -250,13 +260,14 @@ class MainStateMachineNode(Node):
 
     def _on_move_result(self, future):
         """Only set flags — timer owns all state transitions."""
+        pending = self._pending_id  # snapshot before any delay
         result = future.result().result
         self._move_ok = result.success
         if not result.success:
             self.get_logger().error(f'Move FAILED: {result.message}')
             # Clean up vision filter — ingredient was never moved
-            if self._pending_id is not None:
-                self.vision.remove_robot_moved_id(self._pending_id)
+            if pending is not None:
+                self.vision.remove_robot_moved_id(pending)
         else:
             self.get_logger().info(
                 f'Move done: {result.pick_position} -> {result.place_position}')
