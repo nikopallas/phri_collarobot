@@ -1,0 +1,12 @@
+# Goal
+int32 ingredient_id
+string destination   # "storage" | "proposal" | "accepted"
+---
+# Result
+bool success
+string message
+string pick_position
+string place_position
+---
+# Feedback
+string state

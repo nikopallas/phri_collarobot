@@ -7,6 +7,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/PickPlace.action"
   "action/Gesture.action"
+  "action/MoveIngredient.action"
 )
 
 ament_package()

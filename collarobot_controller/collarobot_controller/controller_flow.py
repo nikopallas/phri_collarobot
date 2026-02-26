@@ -5,9 +5,11 @@ from rclpy.executors import MultiThreadedExecutor
 import time
 import sys
 import select
+from pathlib import Path
 from rclpy.action import ActionClient
+from rclpy.callback_groups import ReentrantCallbackGroup
 from std_msgs.msg import String
-from action_msgs.msg import GoalStatus
+from collarobot_msgs.action import MoveIngredient, Gesture
 from enum import Enum
 import json
 from typing import Dict, List, Optional
@@ -123,8 +125,24 @@ class MainStateMachineNode(Node):
         self.wait_start_time = 0.0
         self.last_tick_time = 0.0
         self.vision_subscriber = VisionNodeSubscriber()
-        # self.action_client = ActionClient()
-        # self.add_node_to_executor(self.vision_subscriber)
+
+        _ing_path = Path(__file__).parent.parent / 'data' / 'ingredients.json'
+        with open(_ing_path) as f:
+            self._name_to_id: Dict[str, int] = json.load(f)
+
+        cb = ReentrantCallbackGroup()
+        self._move_client = ActionClient(
+            self, MoveIngredient, '/collarobot/move_ingredient', callback_group=cb,
+        )
+        self._gesture_client = ActionClient(
+            self, Gesture, '/gesture_node/gesture', callback_group=cb,
+        )
+        self._robot_busy = False
+        self._gesture_busy = False
+        self._pending_ingredient_id: Optional[int] = None
+        self._pending_ingredient_name: Optional[str] = None
+        self.rejected: set = set()   # ingredient names rejected this session
+        self.excluded: set = set()   # recipe names to exclude from prediction
 
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.get_logger().info("Node started with models.py integration.")
@@ -132,77 +150,83 @@ class MainStateMachineNode(Node):
     def subscribe_from_vision(self):
         return self.vision_subscriber.check_and_reset_new_ingredient_flag()
 
-    def send_motion_robot_controller(self, motion_name):
-        self.get_logger().info(f">>> SENDING MOTION: {motion_name}")
-        return # TEMP
-        # 1. Check server availability
-        if not self.action_client.wait_for_server(timeout_sec=5.0):
-            self.get_logger().error("Action server not available!")
-            return
-
-        # 2. Wrap the string in the actual Goal message type
-        # Replace 'MyActionType' with your actual Action name (e.g., RobotMotion)
-        """
-         my actionType sould be adjusted with the action name 
-         action name will be defined later in action file
-        """
-        goal_msg = MyActionType.Goal()
-        goal_msg.motion_name = motion_name  # Ensure 'motion_name' exists in your .action file
-
-        # 3. Send Async (DO NOT sleep after this)
-        self.get_logger().info(f"Goal '{motion_name}' is being dispatched...")
-
-        self.send_goal_future = self.action_client.send_goal_async(
-            goal_msg,
-            feedback_callback=self.feedback_callback  # Optional: if you want live updates
+    def send_gesture_robot_controller(self, gesture_name: str):
+        self.get_logger().info(f'>>> SENDING GESTURE: {gesture_name}')
+        goal = Gesture.Goal()
+        goal.gesture_name = gesture_name
+        goal.return_position = 'home'
+        self._gesture_busy = True
+        self._gesture_client.send_goal_async(goal).add_done_callback(
+            self._gesture_goal_response_cb
         )
 
-        # This callback handles the "Accepted/Rejected" response automatically
-        self.send_goal_future.add_done_callback(self.goal_response_callback)
-
-    def goal_response_callback(self, future):
-        # Retrieve the motion name using the future as a key
-        motion_name = self._pending_goals.pop(future)
-
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error(f"Motion '{motion_name}' REJECTED by server.")
+    def _gesture_goal_response_cb(self, future):
+        handle = future.result()
+        if not handle.accepted:
+            self.get_logger().error('Gesture goal REJECTED by gesture_node')
+            self._gesture_busy = False
             return
+        handle.get_result_async().add_done_callback(self._gesture_result_cb)
 
-        self.get_logger().info(f"Motion '{motion_name}' ACCEPTED. Execution starting...")
-
-        # To keep track of it until it's FINISHED, we pass it to the next future
-        get_result_future = goal_handle.get_result_async()
-
-        # We use a 'lambda' here to "sneak" the motion_name into the next function
-        get_result_future.add_done_callback(
-            lambda f: self.get_result_callback(f, motion_name)
-        )
-
-    def get_result_callback(self, future, motion_name):
-        status = future.result().status
-
-        if status == GoalStatus.STATUS_SUCCEEDED:
-            self.get_logger().info(f" FINISHED: The '{motion_name}' action is complete.")
-
+    def _gesture_result_cb(self, future):
+        result = future.result().result
+        self._gesture_busy = False
+        if result.success:
+            self.get_logger().info('Gesture done')
         else:
-            self.get_logger().warn(f" FAILED: The '{motion_name}' action ended with status: {status}")
+            self.get_logger().error(f'Gesture FAILED: {result.message}')
+
+
+    def send_motion_robot_controller(self, ingredient_id: Optional[int], destination: str):
+        if ingredient_id is None:
+            self.get_logger().warn('send_motion_robot_controller: no ingredient ID set')
+            return
+        self.get_logger().info(f'>>> SENDING MOTION: ingredient {ingredient_id} -> {destination}')
+        goal = MoveIngredient.Goal()
+        goal.ingredient_id = ingredient_id
+        goal.destination = destination
+        self._robot_busy = True
+        self._move_client.send_goal_async(goal).add_done_callback(
+            self._move_goal_response_cb
+        )
+
+    def _move_goal_response_cb(self, future):
+        handle = future.result()
+        if not handle.accepted:
+            self.get_logger().error('Move goal REJECTED by motion coordinator')
+            self._robot_busy = False
+            return
+        handle.get_result_async().add_done_callback(self._move_result_cb)
+
+    def _move_result_cb(self, future):
+        result = future.result().result
+        self._robot_busy = False
+        if result.success:
+            self.get_logger().info(
+                f'Move done: {result.pick_position} -> {result.place_position}'
+            )
+        else:
+            self.get_logger().error(f'Move FAILED: {result.message}')
 
     def timer_callback(self):
         match self.current_state:
             case States.IDLE:
                 if self.cycle_done:
                     self.cycle_done = False
+                    self.rejected = set()
+                    self.excluded = set()
                     self.next_state = States.HAND_INVITATION
 
             case States.HAND_INVITATION:
-                self.send_motion_robot_controller("Hand Invitation")
+                self.send_gesture_robot_controller("invite")
                 if self.subscribe_from_vision():
                     self.next_state = States.MAIN_BRAIN
                 else:
                     self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT:
+                if self._robot_busy or self._gesture_busy:
+                    return  # don't react to vision while robot or gesture is running
                 if self.subscribe_from_vision():
                     self.next_state = States.MAIN_BRAIN
 
@@ -219,9 +243,12 @@ class MainStateMachineNode(Node):
                     available = proposed = accepted = set()
 
                 action, ingredient = models.pick_action(
-                    accepted, proposed, available
+                    accepted, proposed, available,
+                    rejected=self.rejected, excluded=self.excluded,
                 )
                 self.get_logger().info(f"Model Decision: {action} -> {ingredient}")
+                self._pending_ingredient_name = ingredient
+                self._pending_ingredient_id = self._name_to_id.get(ingredient) if ingredient else None
 
                 if action == "proposed":
                     self.next_state = States.PROPOSE_NEW_INGREDIENT
@@ -235,19 +262,21 @@ class MainStateMachineNode(Node):
                     self.get_logger().warn(f"Unknown decision: {action}. Staying in Brain.")
 
             case States.PROPOSE_NEW_INGREDIENT:
-                self.send_motion_robot_controller("Propose New")
+                self.send_motion_robot_controller(self._pending_ingredient_id, 'proposal')
                 self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.PUT_INGREDIENT_BACK:
-                self.send_motion_robot_controller("Put Back")
+                if self._pending_ingredient_name:
+                    self.rejected.add(self._pending_ingredient_name)
+                self.send_motion_robot_controller(self._pending_ingredient_id, 'storage')
                 self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.ACCEPT_INGREDIENT:
-                self.send_motion_robot_controller("Accept")
+                self.send_motion_robot_controller(self._pending_ingredient_id, 'accepted')
                 self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.HAND_CIRCLE:
-                self.send_motion_robot_controller("Hand Circle")
+                self.send_gesture_robot_controller("circle")
 
                 latest = self.vision_subscriber.latest_data
                 if latest:

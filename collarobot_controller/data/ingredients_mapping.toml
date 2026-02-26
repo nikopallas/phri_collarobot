@@ -1,0 +1,29 @@
+# Maps ArUco ingredient ID -> fixed storage slot name
+# Slot must exist in positions.toml to be usable.
+# Adjust IDs/slots to match your physical setup.
+#
+# Record missing positions with:
+#   ros2 run collarobot_actions record_position storage3-1
+
+[storage_slots]
+# Currently recorded (rows 1-2)
+6  = "storage1-1"   # beans
+7  = "storage1-2"   # beef
+8  = "storage1-3"   # bread
+9  = "storage2-1"   # butter
+10 = "storage2-2"   # carrot
+11 = "storage2-3"   # cheese
+# Rows 3-6 need to be recorded
+12 = "storage3-1"   # chicken
+13 = "storage3-2"   # eggs
+14 = "storage3-3"   # flour
+15 = "storage4-1"   # garlic
+16 = "storage4-2"   # milk
+17 = "storage4-3"   # olive_oil
+18 = "storage5-1"   # onion
+19 = "storage5-2"   # potatoes
+20 = "storage5-3"   # rice
+21 = "storage6-1"   # salt
+22 = "storage6-2"   # spaghetti
+23 = "storage6-3"   # sugar
+24 = "storage7-1"   # tomato  (19 ingredients > 18 slots in rows 1-6 -> row 7)

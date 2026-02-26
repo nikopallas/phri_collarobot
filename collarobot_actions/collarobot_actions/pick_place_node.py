@@ -14,7 +14,7 @@ The operator must set carriage and lift manually; use goto_carriage_lift to comm
 Gripper values are read from positions.toml (gripper_open / gripper_close).
 
 Action client:
-  ros2 action send_goal --feedback /pick_place_node/pick_place \\
+  ros2 action send_goal --feedback /collarobot/pick_place \\
       collarobot_msgs/action/PickPlace \\
       '{ignore_carriage: false, pick_position: "", place_position: ""}'
 """

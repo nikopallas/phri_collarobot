@@ -10,6 +10,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/data', ['data/ingredients_mapping.toml']),
     ],
     install_requires=['setuptools', 'numpy'],  # Only setuptools is needed here
     zip_safe=True,
@@ -25,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'controller_node = collarobot_controller.controller_flow:main',
+            'motion_coordinator_node = collarobot_controller.motion_coordinator_node:main',
         ],
     },
 )

@@ -85,13 +85,39 @@ ros2 action send_goal --feedback /pick_place_node/pick_place \
     collarobot_msgs/action/PickPlace '{}'
 ```
 
+## motion_coordinator_node — action server
+
+Action: `/collarobot/move_ingredient` (`collarobot_msgs/action/MoveIngredient`)
+
+Middle layer between `controller_flow` and `pick_place_node`:
+- Tracks exact slot position of every ingredient in memory
+- Resolves `(ingredient_id, destination)` → `(pick_position, place_position)`
+- Calls `/collarobot/pick_place` with real slot names
+- Detects human moves by comparing `/collarobot/state` with internal state
+
+Config: `collarobot_controller/data/ingredients_mapping.toml`
+```toml
+[storage_slots]
+6 = "storage1-1"   # beans
+12 = "storage3-1"  # chicken  (etc.)
+```
+Robot zones: rows 1-4 | Human zones: rows 5-6
+
+```bash
+ros2 run collarobot_controller motion_coordinator_node
+
+# Manual test:
+ros2 action send_goal /collarobot/move_ingredient \
+    collarobot_msgs/action/MoveIngredient '{ingredient_id: 6, destination: "proposal"}'
+```
+
 ## Build
 
 ```bash
-# Must build collarobot_msgs first (generates PickPlace.action)
+# Must build collarobot_msgs first (generates PickPlace.action + MoveIngredient.action)
 colcon build --packages-select collarobot_msgs --symlink-install
 . install/setup.bash
-colcon build --packages-select collarobot_actions --symlink-install
+colcon build --packages-select collarobot_actions collarobot_controller --symlink-install
 . install/setup.bash
 ```
 
