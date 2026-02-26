@@ -1,48 +1,23 @@
-import time
 import json
 from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-import cv2
 
-from collarobot_perception.detect_zones import get_state, MarkerDetectionError
+from collarobot_perception.detect_zones import get_state
 from collarobot_perception.take_image import capture_frame
 
 IMAGE_DIR = Path(__file__).parent.parent / "images"
 TEST_IMAGE_PATH = Path("~/collarobot_ws/src/collarobot_perception/images/capture").expanduser()
 
 
-def capture_and_detect(debug=False, max_retries=12) -> dict:
-    """Captures a frame and returns the current state with retry logic."""
-    last_frame = None
-    for attempt in range(max_retries):
-        try:
-            frame = capture_frame()
-            if frame is None:
-                print(f"Attempt {attempt + 1}/{max_retries}: Image capture failed.")
-                continue
-
-            last_frame = frame
-            return get_state(frame, debug=debug)
-        except MarkerDetectionError as e:
-            print(f"Attempt {attempt + 1}/{max_retries}: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(0.1)
-            continue
-        except Exception as e:
-            print(f"Attempt {attempt + 1}/{max_retries}: Unexpected error: {e}")
-            continue
-
-    # Save the last frame for debugging
-    if last_frame is not None:
-        print("Showing last captured frame (press any key to close)...")
-        cv2.imshow("Failed Capture Debug", last_frame)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-    raise RuntimeError(f"Failed to detect zones after {max_retries} attempts.")
+def capture_and_detect(debug=False) -> dict:
+    """Captures a frame and returns the current state."""
+    frame = capture_frame()
+    if frame is None:
+        raise RuntimeError("Image capture failed.")
+    return get_state(frame, debug=debug)
 
 
 class StatePublisher(Node):
