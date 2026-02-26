@@ -28,19 +28,8 @@ class StatePublisher(Node):
 
         self.debug = True
 
-        # Load ingredients
-        self.ingredients_path = (Path(__file__).parent.parent.parent / 
-                                 "collarobot_controller" / "data" / "ingredients.json")
-        try:
-            with open(self.ingredients_path, 'r') as f:
-                self.ingredient_map = json.load(f)
-            self.id_to_name = {v: k for k, v in self.ingredient_map.items()}
-            self.storage = set(self.ingredient_map.values())
-        except Exception as e:
-            self.get_logger().error(f"Failed to load ingredients.json from {self.ingredients_path}: {e}")
-            self.ingredient_map = {}
-            self.id_to_name = {}
-            self.storage = set(range(10))
+        # Ingredient IDs 6-24
+        self.storage = set(range(6, 25))
 
         self.proposed = set()
         self.accepted = set()
@@ -80,9 +69,9 @@ class StatePublisher(Node):
     def cli_loop(self):
         while True:
             try:
-                name = input("\nEnter ingredient name: ").strip().lower()
-                if name not in self.ingredient_map:
-                    print(f"Unknown ingredient: {name}. Available: {', '.join(self.ingredient_map.keys())}")
+                id_input = input("\nEnter ingredient ID (6-24): ").strip()
+                if not id_input.isdigit() or not (6 <= int(id_input) <= 24):
+                    print("Invalid ID. Please enter a number between 6 and 24.")
                     continue
 
                 target_input = input("Enter target zone (0: storage, 1: proposed, 2: accepted): ").strip()
@@ -90,7 +79,7 @@ class StatePublisher(Node):
                     print("Invalid zone. Use 0, 1, or 2.")
                     continue
 
-                obj_id = self.ingredient_map[name]
+                obj_id = int(id_input)
                 target = int(target_input)
 
                 self.move_object(obj_id, target)
@@ -123,7 +112,7 @@ class StatePublisher(Node):
             elif target == 2:
                 self.accepted.add(obj_id)
 
-        print(f"Moved '{self.id_to_name.get(obj_id, obj_id)}' (ID {obj_id}) to zone {target}")
+        print(f"Moved ingredient ID {obj_id} to zone {target}")
 
 
 def main(args=None):
