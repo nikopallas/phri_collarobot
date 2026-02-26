@@ -413,52 +413,6 @@ time_from_start = 10.0
 joints = [-2.036937, 1.045238, 0.656602, -1.764613, -0.856208, -1.122598]
 time_from_start = 10.0
 
-# ── Human proposal slots (rows 5-6, 3 cols) — SIM DUMMY VALUES ──────────
-# Based on robot proposal rows with joint_2 offsets.  Replace with real
-# recorded positions before running on physical hardware.
-
-[proposal5-1]
-joints = [-0.197969, 0.656364, 0.942797, 2.993955, -0.929272, -1.558572]
-time_from_start = 2.0
-
-[proposal5-2]
-joints = [-0.514075, 0.475149, 0.464941, -2.989604, -1.365774, -1.564818]
-time_from_start = 2.0
-
-[proposal5-3]
-joints = [-0.871837, 0.483311, 0.441000, -2.644993, -1.340014, -1.472261]
-time_from_start = 2.0
-
-[proposal6-1]
-joints = [-0.198009, 0.527259, 0.999784, 2.966011, -0.820248, -1.558980]
-time_from_start = 2.0
-
-[proposal6-2]
-joints = [-0.514226, 0.308694, 0.441023, -2.950784, -1.324208, -1.574540]
-time_from_start = 2.0
-
-[proposal6-3]
-joints = [-1.108677, 0.405884, 0.441171, -2.498824, -1.326579, -1.472720]
-time_from_start = 2.0
-
-# ── Human accepted slots (rows 5-6, 2 cols) — SIM DUMMY VALUES ──────────
-
-[accepted5-1]
-joints = [-1.337253, 0.608536, 0.246370, -2.417324, -1.323756, -1.171902]
-time_from_start = 2.0
-
-[accepted5-2]
-joints = [-1.469197, 0.683963, 0.244447, -2.310846, -1.197120, -0.979065]
-time_from_start = 2.0
-
-[accepted6-1]
-joints = [-1.469334, 0.534990, 0.276926, -2.202494, -1.301932, -1.194165]
-time_from_start = 2.0
-
-[accepted6-2]
-joints = [-1.651140, 0.660334, 0.275296, -2.190489, -1.132356, -0.973299]
-time_from_start = 2.0
-
 [accepted4-1]
 joints = [0.413848, 0.007964, 0.732309, 3.098087, -0.483933, -1.558667]
 time_from_start = 3.0
