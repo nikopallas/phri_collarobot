@@ -84,6 +84,15 @@ class StatePublisher(Node):
 
                 self.move_object(obj_id, target)
 
+                state = {
+                    "storage": list(self.storage),
+                    "proposed": list(self.proposed),
+                    "accepted": list(self.accepted),
+                    "relative_positions": {}
+                }
+
+                print(f"New State: {state}")
+
             except Exception as e:
                 print(f"Error in CLI loop: {e}")
 
