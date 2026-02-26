@@ -18,6 +18,11 @@ from typing import Dict, List, Optional
 # Import the model models to get the main_brain feedback
 import collarobot_controller.models as models
 
+DATA_PATH = (
+    Path.home() / 'collarobot_ws' / 'src' / 'collarobot_controller' 
+    / 'data'
+)
+
 class States(Enum):
     IDLE = 0
     WAIT_UNTIL_HUMAN_PUT_INGREDIENT = 1
@@ -126,7 +131,7 @@ class MainStateMachineNode(Node):
         self.last_tick_time = 0.0
         self.vision_subscriber = VisionNodeSubscriber()
 
-        _ing_path = Path(__file__).parent.parent / 'data' / 'ingredients.json'
+        _ing_path = DATA_PATH / 'ingredients.json'
         with open(_ing_path) as f:
             self._name_to_id: Dict[str, int] = json.load(f)
 

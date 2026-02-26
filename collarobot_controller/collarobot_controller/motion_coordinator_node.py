@@ -37,8 +37,10 @@ POSITIONS_PATH = (
     Path.home() / 'collarobot_ws' / 'src' / 'collarobot_actions'
     / 'collarobot_actions' / 'positions.toml'
 )
-MAPPING_PATH = Path(__file__).parent.parent / 'data' / 'ingredients_mapping.toml'
-
+MAPPING_PATH = (
+    Path.home() / 'collarobot_ws' / 'src' / 'collarobot_controller' 
+    / 'data' / 'ingredients_mapping.toml'
+)
 ROBOT_MAX_ROW = 4   # robot owns rows 1-4 in proposal/accepted; human owns rows 5+
 
 # Vision topic uses "proposed"; internal state uses "proposal"
