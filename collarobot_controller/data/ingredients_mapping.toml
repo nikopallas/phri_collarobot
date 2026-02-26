@@ -25,5 +25,5 @@
 20 = "storage5-3"   # rice
 21 = "storage6-1"   # salt
 22 = "storage6-2"   # spaghetti
-23 = "storage6-3"   # sugar
-24 = "storage7-1"   # tomato  (19 ingredients > 18 slots in rows 1-6 -> row 7)
+23 = "storage6-3"   # tomato  (19 ingredients > 18 slots in rows 1-6 -> row 7)
+24 = "storage7-1"   # sugar

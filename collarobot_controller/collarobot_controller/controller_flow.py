@@ -18,6 +18,11 @@ from typing import Dict, List, Optional
 # Import the model models to get the main_brain feedback
 import collarobot_controller.models as models
 
+DATA_PATH = (
+    Path.home() / 'collarobot_ws' / 'src' / 'collarobot_controller' 
+    / 'data'
+)
+
 class States(Enum):
     IDLE = 0
     WAIT_UNTIL_HUMAN_PUT_INGREDIENT = 1
@@ -126,7 +131,7 @@ class MainStateMachineNode(Node):
         self.last_tick_time = 0.0
         self.vision_subscriber = VisionNodeSubscriber()
 
-        _ing_path = Path(__file__).parent.parent / 'data' / 'ingredients.json'
+        _ing_path = DATA_PATH / 'ingredients.json'
         with open(_ing_path) as f:
             self._name_to_id: Dict[str, int] = json.load(f)
 
@@ -135,7 +140,7 @@ class MainStateMachineNode(Node):
             self, MoveIngredient, '/collarobot/move_ingredient', callback_group=cb,
         )
         self._gesture_client = ActionClient(
-            self, Gesture, '/gesture_node/gesture', callback_group=cb,
+            self, Gesture, '/collarobot/gesture', callback_group=cb,
         )
         self._robot_busy = False
         self._gesture_busy = False
@@ -218,15 +223,15 @@ class MainStateMachineNode(Node):
                     self.next_state = States.HAND_INVITATION
 
             case States.HAND_INVITATION:
-                self.send_gesture_robot_controller("invite")
+                self.send_gesture_robot_controller("wiggle")
                 if self.subscribe_from_vision():
                     self.next_state = States.MAIN_BRAIN
                 else:
                     self.next_state = States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT
 
             case States.WAIT_UNTIL_HUMAN_PUT_INGREDIENT:
-                if self._robot_busy or self._gesture_busy:
-                    return  # don't react to vision while robot or gesture is running
+                if self._robot_busy:
+                    return  # don't react to vision while robot is moving
                 if self.subscribe_from_vision():
                     self.next_state = States.MAIN_BRAIN
 
