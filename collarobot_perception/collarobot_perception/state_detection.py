@@ -28,7 +28,20 @@ class StatePublisher(Node):
 
         self.debug = True
 
-        self.storage = set(range(10))   # objects 0–9 start in storage
+        # Load ingredients
+        self.ingredients_path = (Path(__file__).parent.parent.parent / 
+                                 "collarobot_controller" / "data" / "ingredients.json")
+        try:
+            with open(self.ingredients_path, 'r') as f:
+                self.ingredient_map = json.load(f)
+            self.id_to_name = {v: k for k, v in self.ingredient_map.items()}
+            self.storage = set(self.ingredient_map.values())
+        except Exception as e:
+            self.get_logger().error(f"Failed to load ingredients.json from {self.ingredients_path}: {e}")
+            self.ingredient_map = {}
+            self.id_to_name = {}
+            self.storage = set(range(10))
+
         self.proposed = set()
         self.accepted = set()
 
@@ -60,25 +73,30 @@ class StatePublisher(Node):
         try:
             msg.data = json.dumps(state, indent=4)
             self.publisher_.publish(msg)
-            self.get_logger().info('Publishing: "%s"' % msg.data)
+            # self.get_logger().info('Publishing: "%s"' % msg.data) # Removed to avoid interrupting CLI
         except Exception as e:
             self.get_logger().error(f"Failed to get/publish state: {e}")
     
     def cli_loop(self):
         while True:
             try:
-                user_input = input("Move object with format (object_id,target_list): ")
-
-                if not user_input.startswith("(") or not user_input.endswith(")"):
-                    print("Invalid format. Example: (9,1)")
+                name = input("\nEnter ingredient name: ").strip().lower()
+                if name not in self.ingredient_map:
+                    print(f"Unknown ingredient: {name}. Available: {', '.join(self.ingredient_map.keys())}")
                     continue
 
-                obj_id, target = map(int, user_input[1:-1].split(","))
+                target_input = input("Enter target zone (0: storage, 1: proposed, 2: accepted): ").strip()
+                if target_input not in ['0', '1', '2']:
+                    print("Invalid zone. Use 0, 1, or 2.")
+                    continue
+
+                obj_id = self.ingredient_map[name]
+                target = int(target_input)
 
                 self.move_object(obj_id, target)
 
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"Error in CLI loop: {e}")
 
     def move_object(self, obj_id: int, target: int):
         """
@@ -87,8 +105,11 @@ class StatePublisher(Node):
             1 = proposed
             2 = accepted
         """
-        with self.state_lock:
+        if target not in [0, 1, 2]:
+            print("Invalid target list. Use 0, 1 or 2.")
+            return
 
+        with self.state_lock:
             # Remove object from all sets
             self.storage.discard(obj_id)
             self.proposed.discard(obj_id)
@@ -101,11 +122,8 @@ class StatePublisher(Node):
                 self.proposed.add(obj_id)
             elif target == 2:
                 self.accepted.add(obj_id)
-            else:
-                print("Invalid target list. Use 0, 1 or 2.")
-                return
 
-        print(f"Moved object {obj_id} to list {target}")
+        print(f"Moved '{self.id_to_name.get(obj_id, obj_id)}' (ID {obj_id}) to zone {target}")
 
 
 def main(args=None):
